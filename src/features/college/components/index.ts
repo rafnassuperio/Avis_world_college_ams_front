@@ -1,0 +1,14 @@
+export * from "./CollegeDetailsCard";
+export * from "./EditCollegeModal";
+export * from "./AddStudentModal";
+export * from "./BulkUploadModal";
+export { CourseModal, type CourseModalProps } from "./CourseModal";
+export { IntakeModal, type IntakeModalProps } from "./IntakeModal";
+export { CategoryModal, type CategoryModalProps } from "./CategoryModal";
+export { OverseasRequestModal, type OverseasRequestModalProps } from "./OverseasRequestModal";
+export { TimetablePdfModal, type TimetablePdfModalProps } from "./TimetablePdfModal";
+export * from "./AddFeeTypeModal";
+export * from "./AddRequirementModal";
+export * from "./CollegeTabs";
+export * from "./tabs";
+export * from "./student-profile";
