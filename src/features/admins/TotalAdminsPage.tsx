@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import {
@@ -26,7 +26,9 @@ import { FilterSelect, FilterSelectOption } from "@/components/ui/FilterSelect";
 import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/ui/Pagination";
 import { dashboardContainerVariants, dashboardSectionVariants } from "@/components/animations/transitions";
-import { getAdminsRoster, saveAdminsRoster } from "./data/mockAdminsData";
+import { admins } from "@/services/ams";
+import { useApiCollection } from "@/hooks/useApiCollection";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { AdminRosterItem, AdminStatus } from "./types";
 import { AdminDetailsModal } from "./components/AdminDetailsModal";
 import { AddAdminModal } from "./components/AddAdminModal";
@@ -43,7 +45,7 @@ export const TotalAdminsPage: React.FC = () => {
   const sectionVariants = shouldReduceMotion ? { hidden: { opacity: 1 }, visible: { opacity: 1 } } : dashboardSectionVariants;
 
   // Master admins list state
-  const [adminsList, setAdminsList] = useState<AdminRosterItem[]>(() => getAdminsRoster());
+  const { data: adminsList, saveList: updateAdminsList, loading, error, reload } = useApiCollection(admins);
 
   // Search and Filters
   const [searchQuery, setSearchQuery] = useState("");
@@ -63,24 +65,21 @@ export const TotalAdminsPage: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   // Save changes to storage whenever adminsList changes
-  const updateAdminsList = useCallback((updated: AdminRosterItem[]) => {
-    setAdminsList(updated);
-    saveAdminsRoster(updated);
-  }, []);
+
 
   // Handle adding an administrator
-  const handleAddAdmin = (newAdmin: AdminRosterItem) => {
+  const handleAddAdmin = async (newAdmin: AdminRosterItem) => {
     const updated = [newAdmin, ...adminsList];
-    updateAdminsList(updated);
+    if (!await updateAdminsList(updated)) return false;
     toast.success("Administrator Added", {
       description: `${newAdmin.name} has been successfully added to the roster.`,
     });
   };
 
   // Handle editing an administrator
-  const handleSaveAdmin = (updatedAdmin: AdminRosterItem) => {
+  const handleSaveAdmin = async (updatedAdmin: AdminRosterItem) => {
     const updated = adminsList.map((adm) => (adm.id === updatedAdmin.id ? updatedAdmin : adm));
-    updateAdminsList(updated);
+    if (!await updateAdminsList(updated)) return false;
     if (selectedAdminForView?.id === updatedAdmin.id) {
       setSelectedAdminForView(updatedAdmin);
     }
@@ -90,11 +89,11 @@ export const TotalAdminsPage: React.FC = () => {
   };
 
   // Handle deleting an administrator
-  const handleDeleteAdmin = () => {
+  const handleDeleteAdmin = async () => {
     if (!selectedAdminForDelete) return;
     const adminToDelete = selectedAdminForDelete;
     const updated = adminsList.filter((adm) => adm.id !== adminToDelete.id);
-    updateAdminsList(updated);
+    if (!await updateAdminsList(updated)) return false;
 
     if (selectedAdminForView?.id === adminToDelete.id) {
       setSelectedAdminForView(null);
@@ -114,7 +113,7 @@ export const TotalAdminsPage: React.FC = () => {
   };
 
   // Handle quick status change
-  const handleStatusChange = (adminId: string, newStatus: AdminStatus) => {
+  const handleStatusChange = async (adminId: string, newStatus: AdminStatus) => {
     const targetAdmin = adminsList.find((a) => a.id === adminId);
     const updated = adminsList.map((adm) => {
       if (adm.id === adminId) {
@@ -126,7 +125,7 @@ export const TotalAdminsPage: React.FC = () => {
       }
       return adm;
     });
-    updateAdminsList(updated);
+    if (!await updateAdminsList(updated)) return false;
     if (selectedAdminForView?.id === adminId) {
       setSelectedAdminForView((prev) => (prev ? { ...prev, status: newStatus } : null));
     }
@@ -238,7 +237,7 @@ export const TotalAdminsPage: React.FC = () => {
     const superAdmins = adminsList.filter((a) => a.role.toLowerCase().includes("super admin")).length;
     const uniqueDepts = new Set(adminsList.map((a) => a.department)).size;
     const twoFactorCount = adminsList.filter((a) => a.twoFactorEnabled).length;
-    const compliancePercent = total > 0 ? Math.round((twoFactorCount / total) * 100) : 100;
+    const compliancePercent = total > 0 ? Math.round((twoFactorCount / total) * 100) : 0;
 
     return {
       total,
@@ -489,6 +488,8 @@ export const TotalAdminsPage: React.FC = () => {
     [navigate, currentPage, pageSize],
   );
 
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
+
   return (
     <motion.div
       variants={containerVariants}
@@ -567,7 +568,7 @@ export const TotalAdminsPage: React.FC = () => {
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-black tracking-tight text-emerald-700">{stats.active}</span>
-            <span className="text-[11px] font-semibold text-emerald-600">Online In AMS</span>
+            <span className="text-[11px] font-semibold text-emerald-600">Active accounts</span>
           </div>
           <div className="mt-1 text-[11px] text-text-muted">Live real-time session tracking</div>
         </div>

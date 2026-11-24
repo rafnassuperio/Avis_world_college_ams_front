@@ -7,9 +7,9 @@ import {
   Tooltip,
 } from 'recharts';
 import { Dropdown } from '@/components/ui/Dropdown';
-import {
-  pendingPaymentsByFilter,
-} from '@/data/mockData';
+import { useAnalytics, monthsForFilter } from "@/services/analytics";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
+
 import { PendingPaymentBreakdownPoint } from '@/types';
 import { useAppStore } from '@/store/useAppStore';
 import { cn } from '@/lib/utils';
@@ -71,7 +71,7 @@ const PaymentsBreakdownComponent: React.FC = () => {
   const feeMonthFilter = useAppStore((state) => state.feeMonthFilter);
   const setFeeMonthFilter = useAppStore((state) => state.setFeeMonthFilter);
   const [selectedFilter, setSelectedFilter] = useState(
-    pendingPaymentsByFilter[feeMonthFilter] ? feeMonthFilter : 'This Month'
+    feeMonthFilter
   );
   const [chartMode, setChartMode] = useState<'grouped' | 'stacked'>('grouped');
   const [activeSeries, setActiveSeries] = useState<'all' | 'tuition' | 'application'>('all');
@@ -88,8 +88,16 @@ const PaymentsBreakdownComponent: React.FC = () => {
     setFeeMonthFilter(val);
   };
 
-  const currentData =
-    pendingPaymentsByFilter[selectedFilter] || pendingPaymentsByFilter['This Month'];
+  const { data, loading, error, reload } = useAnalytics();
+  const values = selectedFilter === "By Program" ? data?.byProgram || [] : monthsForFilter(data?.monthly || [], selectedFilter).map(m => ({ period: m.month, tuition: m.tuition, application: m.application }));
+  const tuition = values.reduce((sum, m) => sum + m.tuition, 0);
+  const application = values.reduce((sum, m) => sum + m.application, 0);
+  const currentData = { tuitionTotal: tuition / 100000, applicationTotal: application / 100000,
+    tuitionPercentage: tuition + application ? Math.round(tuition / (tuition + application) * 100) : 0,
+    applicationPercentage: tuition + application ? Math.round(application / (tuition + application) * 100) : 0,
+    points: values.map(m => ({ ...m, tuition: m.tuition / 100000, application: m.application / 100000,
+      tuitionDisplay: data?.currency + " " + m.tuition.toLocaleString(), applicationDisplay: data?.currency + " " + m.application.toLocaleString(), totalDisplay: data?.currency + " " + (m.tuition + m.application).toLocaleString() })) };
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
 
   return (
     <div className="h-full bg-white rounded-[20px] p-5 border border-brand-border shadow-[0_2px_10px_-2px_rgba(87,0,31,0.03)] hover:shadow-[0_8px_24px_-4px_rgba(87,0,31,0.06)] transition-all duration-300 flex flex-col justify-between">
@@ -160,7 +168,7 @@ const PaymentsBreakdownComponent: React.FC = () => {
           <span className="w-2.5 h-2.5 rounded-full bg-[#702B40] flex-shrink-0 group-hover:scale-110 transition-transform" />
           <span className="text-[11px] font-medium text-text-secondary">Tuition:</span>
           <span className="text-[11px] font-bold text-text-primary">
-            ₹ {currentData.tuitionTotal.toFixed(1)}L
+            {data?.currency} {currentData.tuitionTotal.toFixed(1)}L
           </span>
           <span className="text-[10px] text-text-muted font-medium hidden sm:inline">
             ({currentData.tuitionPercentage}%)
@@ -184,7 +192,7 @@ const PaymentsBreakdownComponent: React.FC = () => {
           <span className="w-2.5 h-2.5 rounded-full bg-[#D28B96] flex-shrink-0 group-hover:scale-110 transition-transform" />
           <span className="text-[11px] font-medium text-text-secondary">Application:</span>
           <span className="text-[11px] font-bold text-text-primary">
-            ₹ {currentData.applicationTotal.toFixed(1)}L
+            {data?.currency} {currentData.applicationTotal.toFixed(1)}L
           </span>
           <span className="text-[10px] text-text-muted font-medium hidden sm:inline">
             ({currentData.applicationPercentage}%)

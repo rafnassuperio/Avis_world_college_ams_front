@@ -26,15 +26,15 @@ export const ApplicationFeesTab: React.FC<ApplicationFeesTabProps> = ({ record, 
   // ----------------------------------------------------
   // Fee Summary Values (Requested: Total Fee - SGD 0.00, Outstanding Amount - SGD 0.00)
   // ----------------------------------------------------
-  const totalFee = 0.0;
-  const outstandingAmount = 0.0;
-  const isSettled = true;
+  const totalFee = (record.applicationFees || 0) + record.history.filter(h => h.feeCategory === "Application Fee").reduce((sum, h) => sum + h.amount, 0);
+  const outstandingAmount = record.applicationFees || 0;
+  const isSettled = outstandingAmount === 0;
 
   // ----------------------------------------------------
   // Form State for Payment Details
   // ----------------------------------------------------
   const [paymentMethod, setPaymentMethod] = useState("Cash");
-  const [oneTimeSettlement, setOneTimeSettlement] = useState("0.00");
+  const [oneTimeSettlement, setOneTimeSettlement] = useState(outstandingAmount.toFixed(2));
   const [paymentDate, setPaymentDate] = useState(getTodayIso);
   const [receiptNo, setReceiptNo] = useState("");
   const [paymentAmount, setPaymentAmount] = useState("0.00");
@@ -86,8 +86,8 @@ export const ApplicationFeesTab: React.FC<ApplicationFeesTabProps> = ({ record, 
   };
 
   // 2. Reset Application Fee Handler
-  const handleResetAppFee = () => {
-    resetPaymentRecord(record.id);
+  const handleResetAppFee = async () => {
+    if (!await resetPaymentRecord(record.id)) return;
     setPaymentMethod("Cash");
     setOneTimeSettlement("0.00");
     setPaymentDate(getTodayIso());
@@ -103,7 +103,7 @@ export const ApplicationFeesTab: React.FC<ApplicationFeesTabProps> = ({ record, 
   };
 
   // 3. Settle Application Fee Handler
-  const handleSettleAppFee = () => {
+  const handleSettleAppFee = async () => {
     const numAmount = parseFloat(paymentAmount.replace(/,/g, ""));
     if (isNaN(numAmount) || numAmount < 0) {
       setAmountError("Please enter a valid payment amount");
@@ -114,13 +114,14 @@ export const ApplicationFeesTab: React.FC<ApplicationFeesTabProps> = ({ record, 
     }
     setAmountError("");
 
-    const res = settlePaymentRecord(record.id, {
+    const res = await settlePaymentRecord(record.id, {
       amount: numAmount,
       paymentMethod: paymentMethod as PaymentHistoryItem["paymentMethod"],
       receiptNo: receiptNo.trim() || undefined,
       feeCategory: "Application Fee",
       itemName: "Student Application Processing & Registration Fee",
       note: `Application fee payment (${paymentMethod}) recorded on ${paymentDate}`,
+      paymentDate,
     });
 
     if (res.success && res.transaction) {
@@ -133,7 +134,7 @@ export const ApplicationFeesTab: React.FC<ApplicationFeesTabProps> = ({ record, 
       });
       setReceiptNo("");
       onUpdate?.();
-    } else {
+    } else if (!res.success) {
       toast.error("Settlement Failed", {
         description: "Could not record application payment settlement. Please try again.",
       });

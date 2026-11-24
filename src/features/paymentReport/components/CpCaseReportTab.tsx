@@ -19,26 +19,31 @@ import { SearchInput } from "@/components/ui/SearchInput";
 import { FilterSelect, FilterSelectOption } from "@/components/ui/FilterSelect";
 import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/ui/Pagination";
-import { mockCpCaseReportList } from "../data/mockPaymentReportData";
+import { getCpReport, getCpExport, useCpOptions } from "@/services/reports";
+import { useApiQuery } from "@/hooks/useApiQuery";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { toast } from "@/components/common/ToastMessage";
+import { apiMessage } from "@/services/ams";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { CpCaseReportRecord } from "../types";
 import { exportToCsv } from "../utils/exportCsv";
 
 export const CpCaseReportTab: React.FC = () => {
-  const [data] = useState<CpCaseReportRecord[]>(mockCpCaseReportList);
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCpStatus, setSelectedCpStatus] = useState("all");
   const [selectedChannelPartner, setSelectedChannelPartner] = useState("all");
 
-  // Pagination
-  const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(8);
-
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, selectedCpStatus, selectedChannelPartner]);
+  const filters = useDebouncedValue(JSON.stringify({search: searchQuery.trim() || undefined, cpStatus: selectedCpStatus === "all" ? undefined : selectedCpStatus, partner: selectedChannelPartner === "all" ? undefined : selectedChannelPartner, limit: pageSize}));
+  const [paging, setPaging] = useState({filters: "", page: 1});
+  const currentPage = paging.filters === filters ? paging.page : 1;
+  const setCurrentPage = (page: number) => setPaging({filters, page});
+  const {data: report, loading, error, reload} = useApiQuery(signal => getCpReport({...JSON.parse(filters), page: currentPage}, signal), [filters, currentPage]);
+  const options = useCpOptions();
+  const [exporting, setExporting] = useState(false);
+  useEffect(() => { if (!loading && report && currentPage > report.totalPages) setPaging({filters, page: report.totalPages}); }, [report, loading, currentPage, filters]);
 
   // CP Status filter options
   const cpStatusOptions: FilterSelectOption[] = [
@@ -48,72 +53,12 @@ export const CpCaseReportTab: React.FC = () => {
     { label: "CP Settled", value: "CP Settled", badgeDot: "bg-emerald-500" },
   ];
 
-  // Channel Partner options derived from data
-  const channelPartnerOptions: FilterSelectOption[] = useMemo(() => {
-    const unique = Array.from(new Set(data.map((item) => item.channelPartner ?? item.corporatePartner).filter(Boolean))).sort();
-    return [{ label: "All Channel Partners", value: "all" }, ...unique.map((partner) => ({ label: partner, value: partner }))];
-  }, [data]);
-
-  // Filtered dataset
-  const filteredData = useMemo(() => {
-    return data.filter((item) => {
-      const q = searchQuery.toLowerCase().trim();
-      const partner = item.channelPartner ?? item.corporatePartner ?? "";
-      const matchesSearch =
-        !q ||
-        item.caseNumber.toLowerCase().includes(q) ||
-        item.studentName.toLowerCase().includes(q) ||
-        item.studentId.toLowerCase().includes(q) ||
-        item.course.toLowerCase().includes(q) ||
-        partner.toLowerCase().includes(q);
-
-      const status = item.cpStatus ?? item.dueStatus;
-      const matchesCpStatus = selectedCpStatus === "all" || status === selectedCpStatus;
-      const matchesPartner = selectedChannelPartner === "all" || partner === selectedChannelPartner;
-
-      return matchesSearch && matchesCpStatus && matchesPartner;
-    });
-  }, [data, searchQuery, selectedCpStatus, selectedChannelPartner]);
-
-  // Aggregate Metrics
-  const metrics = useMemo(() => {
-    const isUnfiltered = filteredData.length === data.length;
-
-    // Count metrics
-    const totalCases = filteredData.length;
-    const uniqueStudents = new Set(filteredData.map((i) => i.studentId)).size;
-    const notDue = filteredData.filter((i) => i.dueStatus === "Not Due").length;
-    const cpDue = filteredData.filter((i) => i.dueStatus === "CP Due").length;
-    const cpSettled = filteredData.filter((i) => i.dueStatus === "CP Settled").length;
-
-    // Financial calculations
-    const totalShortfall = filteredData.reduce((acc, curr) => acc + (curr.shortfall ?? 0), 0);
-    const totalCpPayable = filteredData.reduce((acc, curr) => acc + (curr.cpPayable ?? 0), 0);
-    const topUpsCollected = filteredData.reduce((acc, curr) => acc + (curr.topUpCollected ?? 0), 0);
-    const remainingCp = filteredData.reduce((acc, curr) => acc + (curr.remainingCp ?? 0), 0);
-
-    return {
-      totalCases: isUnfiltered ? 37 : totalCases,
-      uniqueStudents: isUnfiltered ? 20 : uniqueStudents,
-      notDue: isUnfiltered ? 0 : notDue,
-      cpDue: isUnfiltered ? 3 : cpDue,
-      cpSettled: isUnfiltered ? 34 : cpSettled,
-      totalShortfall: isUnfiltered ? 32179.23 : totalShortfall,
-      totalCpPayable: isUnfiltered ? 15485.53 : totalCpPayable,
-      topUpsCollected: isUnfiltered ? 6369.84 : topUpsCollected,
-      remainingCp: isUnfiltered ? 995.22 : remainingCp,
-    };
-  }, [filteredData, data.length]);
-
-  // Pagination calculations
-  const totalItems = filteredData.length;
-  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const validCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
-
-  const paginatedData = useMemo(() => {
-    const start = (validCurrentPage - 1) * pageSize;
-    return filteredData.slice(start, start + pageSize);
-  }, [filteredData, validCurrentPage, pageSize]);
+  const channelPartnerOptions: FilterSelectOption[] = [{label: "All Channel Partners", value: "all"}, ...(options.data?.partners || []).map(partner => ({label: partner, value: partner}))];
+  const metrics = report?.metrics || {totalCases: 0, uniqueStudents: 0, notDue: 0, cpDue: 0, cpSettled: 0, totalShortfall: 0, totalCpPayable: 0, topUpsCollected: 0, remainingCp: 0};
+  const totalItems = report?.total || 0;
+  const totalPages = report?.totalPages || 1;
+  const validCurrentPage = currentPage;
+  const paginatedData = report?.rows || [];
 
   // Reset filters
   const handleResetFilters = () => {
@@ -124,8 +69,12 @@ export const CpCaseReportTab: React.FC = () => {
   };
 
   // Export handler
-  const handleExport = () => {
-    const exportRows = filteredData.map((item, idx) => ({
+  const handleExport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+    const rows = await getCpExport(JSON.parse(filters));
+    const exportRows = rows.map((item, idx) => ({
       "#": idx + 1,
       "Student ID": item.studentId,
       "Student Name": item.studentName,
@@ -143,6 +92,8 @@ export const CpCaseReportTab: React.FC = () => {
     }));
 
     exportToCsv("CP_Case_Report", exportRows);
+    } catch (error) { toast.error("Unable to export CP cases", { description: apiMessage(error) }); }
+    finally { setExporting(false); }
   };
 
   // CP Status badge renderer
@@ -402,6 +353,8 @@ export const CpCaseReportTab: React.FC = () => {
     [validCurrentPage, pageSize],
   );
 
+  if ((!report && loading) || error || options.error) return <AsyncStateView isLoading={loading} error={error || options.error} onRetry={() => { void reload(); void options.reload(); }}>{null}</AsyncStateView>;
+
   return (
     <div className="space-y-4">
       {/* 1. Summary Metric Cards */}
@@ -601,7 +554,8 @@ export const CpCaseReportTab: React.FC = () => {
           <Button
             variant="secondary"
             size="sm"
-            onClick={handleExport}
+            onClick={() => void handleExport()}
+            disabled={exporting || loading || totalItems === 0}
             className="shadow-xs h-9 shrink-0 gap-1.5 text-xs"
           >
             <Download className="h-3.5 w-3.5" />
@@ -634,7 +588,7 @@ export const CpCaseReportTab: React.FC = () => {
         />
 
         {/* 4. Pagination */}
-        {filteredData.length > 0 && (
+        {totalItems > 0 && (
           <div className="shadow-xs rounded-2xl border border-brand-border bg-white px-4 py-3">
             <Pagination
               currentPage={validCurrentPage}
@@ -658,3 +612,4 @@ export const CpCaseReportTab: React.FC = () => {
 };
 
 export default CpCaseReportTab;
+

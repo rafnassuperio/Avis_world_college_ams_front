@@ -8,9 +8,13 @@ import { PaymentReportTab } from "./components/PaymentReportTab";
 import { AgentRepReportTab } from "./components/AgentRepReportTab";
 import { CpCaseReportTab } from "./components/CpCaseReportTab";
 import { PaymentReportTabId, PaymentSubTabId } from "./types";
-import { mockPaymentReportList, mockAgentRepReportList, mockCpCaseReportList } from "./data/mockPaymentReportData";
+import { useFinanceSummary, useCpReportCount } from "@/services/reports";
 
 export const PaymentReportPage: React.FC = () => {
+  const { data: finance } = useFinanceSummary();
+  const { data: cpCases } = useCpReportCount();
+  const paymentCount = finance?.paymentCount || 0;
+  const partnerCount = (finance?.agentCount || 0) + (finance?.repCount || 0);
   const shouldReduceMotion = useReducedMotion();
 
   // Active tab states for contextual breadcrumbs and UI synchronization
@@ -38,7 +42,7 @@ export const PaymentReportPage: React.FC = () => {
         label: "Payment Report",
         shortLabel: "Payment",
         icon: ReceiptText,
-        badge: mockPaymentReportList.length + mockAgentRepReportList.length,
+        badge: paymentCount + partnerCount,
         badgeVariant: "brand",
         hasChildTabs: true,
         defaultSubTabId: "payment-report-sub",
@@ -47,7 +51,7 @@ export const PaymentReportPage: React.FC = () => {
             id: "payment-report-sub",
             label: "Payment Report",
             icon: FileSpreadsheet,
-            badge: mockPaymentReportList.length,
+            badge: paymentCount,
             badgeVariant: "success",
             content: <PaymentReportTab />,
           },
@@ -55,7 +59,7 @@ export const PaymentReportPage: React.FC = () => {
             id: "agent-rep-report",
             label: "Agent & Rep Report",
             icon: Users,
-            badge: mockAgentRepReportList.length,
+            badge: partnerCount,
             badgeVariant: "purple",
             content: <AgentRepReportTab />,
           },
@@ -66,14 +70,14 @@ export const PaymentReportPage: React.FC = () => {
         label: "CP Case Report",
         shortLabel: "CP Case",
         icon: Briefcase,
-        badge: mockCpCaseReportList.length,
+        badge: cpCases ?? 0,
         badgeVariant: "alert",
         hasChildTabs: false,
         subTabs: false,
         content: <CpCaseReportTab />,
       },
     ],
-    [],
+    [finance, cpCases],
   );
 
   return (

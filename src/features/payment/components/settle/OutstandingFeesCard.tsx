@@ -62,7 +62,7 @@ export interface OutstandingFeesCardProps {
   onToggleSelectItem: (id: string) => void;
   onSelectAll: () => void;
   onClearSelection: () => void;
-  onAddNewFee: (name: string, amount: number, note?: string) => void;
+  onAddNewFee: (name: string, amount: number, note?: string) => void | boolean | Promise<void | boolean>;
   onRemoveFee: (id: string) => void;
   currency?: string;
   className?: string;
@@ -122,7 +122,7 @@ export const OutstandingFeesCard: React.FC<OutstandingFeesCardProps> = ({
   };
 
   // Save new fee
-  const handleSaveFee = () => {
+  const handleSaveFee = async () => {
     setFormError("");
     if (addMode === "preset") {
       const parsedAmount = parseFloat(presetAmountInput.replace(/,/g, ""));
@@ -132,7 +132,7 @@ export const OutstandingFeesCard: React.FC<OutstandingFeesCardProps> = ({
       }
       const found = feeTypes.find((f) => f.label === selectedPresetLabel);
       const note = found && typeof found.fee === "string" ? found.fee : undefined;
-      onAddNewFee(selectedPresetLabel, parsedAmount, note);
+      if (await onAddNewFee(selectedPresetLabel, parsedAmount, note) === false) return;
       setIsAddCollapseOpen(false);
     } else {
       if (!customFeeName.trim()) {
@@ -144,7 +144,7 @@ export const OutstandingFeesCard: React.FC<OutstandingFeesCardProps> = ({
         setFormError("Please enter a valid amount greater than SGD 0");
         return;
       }
-      onAddNewFee(customFeeName.trim(), parsedAmount);
+      if (await onAddNewFee(customFeeName.trim(), parsedAmount) === false) return;
       setCustomFeeName("");
       setCustomFeeAmount("");
       setIsAddCollapseOpen(false);

@@ -9,7 +9,7 @@ import countriesData from "@/data/country.json";
 export interface AddInstituteModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (newInstitute: InstituteItem) => void;
+  onAdd: (newInstitute: InstituteItem) => void | boolean | Promise<void | boolean>;
   nextInstituteCode?: string;
 }
 
@@ -101,7 +101,7 @@ export const AddInstituteModal: React.FC<AddInstituteModalProps> = ({
     setError("");
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       setError("Please enter the Institute Name.");
@@ -152,7 +152,7 @@ export const AddInstituteModal: React.FC<AddInstituteModalProps> = ({
       createdAt: todayStr,
     };
 
-    onAdd(newInstitute);
+    if (await onAdd(newInstitute) === false) return;
     handleReset();
     onClose();
   };

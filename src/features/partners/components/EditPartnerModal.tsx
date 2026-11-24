@@ -14,8 +14,8 @@ export interface EditPartnerModalProps {
   agent?: AgentItem | null;
   representative?: RepresentativeItem | null;
   allRepresentatives: RepresentativeItem[];
-  onSaveAgent: (updatedAgent: AgentItem) => void;
-  onSaveRepresentative: (updatedRep: RepresentativeItem) => void;
+  onSaveAgent: (updatedAgent: AgentItem) => void | boolean | Promise<void | boolean>;
+  onSaveRepresentative: (updatedRep: RepresentativeItem) => void | boolean | Promise<void | boolean>;
 }
 
 export const EditPartnerModal: React.FC<EditPartnerModalProps> = ({
@@ -71,7 +71,7 @@ export const EditPartnerModal: React.FC<EditPartnerModalProps> = ({
     }
   }, [isAgent, agent, representative, isOpen]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!name.trim()) {
@@ -96,7 +96,7 @@ export const EditPartnerModal: React.FC<EditPartnerModalProps> = ({
         type: agentType,
         representative: supervisingRep || agent.representative,
       };
-      onSaveAgent(updated);
+      if (await onSaveAgent(updated) === false) return;
       toast.success("Agent Profile Updated", {
         description: `Details for ${updated.name} saved successfully.`,
       });
@@ -113,7 +113,7 @@ export const EditPartnerModal: React.FC<EditPartnerModalProps> = ({
         organization: organization.trim() || undefined,
         region: region.trim() || undefined,
       };
-      onSaveRepresentative(updated);
+      if (await onSaveRepresentative(updated) === false) return;
       toast.success("Representative Profile Updated", {
         description: `Details for ${updated.name} saved successfully.`,
       });

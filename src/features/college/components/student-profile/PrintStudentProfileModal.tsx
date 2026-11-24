@@ -33,11 +33,11 @@ export const PrintStudentProfileModal: React.FC<PrintStudentProfileModalProps> =
   };
 
   const totalFeesNum =
-    typeof student.totalFees === "number" ? student.totalFees : parseFloat(String(student.totalFees || 2583.3)) || 2583.3;
+    typeof student.totalFees === "number" ? student.totalFees : parseFloat(String(student.totalFees || 0)) || 0;
   const amountPaidNum =
     typeof student.amountPaid === "number" ? student.amountPaid : parseFloat(String(student.amountPaid || 0)) || 0;
   const pendingAmountNum =
-    typeof student.pendingAmount === "number" ? student.pendingAmount : parseFloat(String(student.pendingAmount || 2583.3)) || 2583.3;
+    typeof student.pendingAmount === "number" ? student.pendingAmount : parseFloat(String(student.pendingAmount || 0)) || 0;
 
   return (
     <Modal
@@ -127,16 +127,16 @@ export const PrintStudentProfileModal: React.FC<PrintStudentProfileModalProps> =
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-text-secondary">
                   <span className="font-mono font-bold text-burgundy-primary">ID: {student.studentId}</span>
                   <span>•</span>
-                  <span>{student.course} ({student.courseCode || "HDIT"})</span>
+                  <span>{student.course} ({student.courseCode || "—"})</span>
                   <span>•</span>
                   <span>Intake: {student.intakeName || student.intake}</span>
                 </div>
               </div>
               <div className="text-right">
                 <span className="inline-block rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-bold uppercase text-emerald-800">
-                  {student.status || "Enrolled"}
+                  {student.status || "—"}
                 </span>
-                <div className="mt-1 text-[10px] text-text-muted">Type: {student.studentType || "International"}</div>
+                <div className="mt-1 text-[10px] text-text-muted">Type: {student.studentType || "—"}</div>
               </div>
             </div>
           </div>
@@ -152,7 +152,7 @@ export const PrintStudentProfileModal: React.FC<PrintStudentProfileModalProps> =
               <div className="space-y-1.5">
                 <div className="flex justify-between border-b border-brand-border/40 py-1">
                   <span className="text-text-muted">College:</span>
-                  <span className="font-semibold text-text-primary">{student.college || "Acetek College"}</span>
+                  <span className="font-semibold text-text-primary">{student.college || "—"}</span>
                 </div>
                 <div className="flex justify-between border-b border-brand-border/40 py-1">
                   <span className="text-text-muted">Course:</span>
@@ -164,19 +164,19 @@ export const PrintStudentProfileModal: React.FC<PrintStudentProfileModalProps> =
                 </div>
                 <div className="flex justify-between border-b border-brand-border/40 py-1">
                   <span className="text-text-muted">Class:</span>
-                  <span className="font-semibold text-text-primary">{student.class || "N/A"}</span>
+                  <span className="font-semibold text-text-primary">{student.class || "—"}</span>
                 </div>
                 <div className="flex justify-between border-b border-brand-border/40 py-1">
                   <span className="text-text-muted">Qualification:</span>
-                  <span className="font-semibold text-text-primary">{student.highestQualification || "N/A"}</span>
+                  <span className="font-semibold text-text-primary">{student.highestQualification || "—"}</span>
                 </div>
                 <div className="flex justify-between border-b border-brand-border/40 py-1">
                   <span className="text-text-muted">Commencement:</span>
-                  <span className="font-mono font-semibold text-text-primary">{student.commencementDate || "N/A"}</span>
+                  <span className="font-mono font-semibold text-text-primary">{student.commencementDate || "—"}</span>
                 </div>
                 <div className="flex justify-between py-1">
                   <span className="text-text-muted">Completion Date:</span>
-                  <span className="font-mono font-semibold text-text-primary">{student.completionDate || "N/A"}</span>
+                  <span className="font-mono font-semibold text-text-primary">{student.completionDate || "—"}</span>
                 </div>
               </div>
             </div>
@@ -190,31 +190,31 @@ export const PrintStudentProfileModal: React.FC<PrintStudentProfileModalProps> =
               <div className="space-y-1.5">
                 <div className="flex justify-between border-b border-brand-border/40 py-1">
                   <span className="text-text-muted">Passport No:</span>
-                  <span className="font-mono font-semibold text-text-primary">{student.passportNo || student.passportOrNric || "N/A"}</span>
+                  <span className="font-mono font-semibold text-text-primary">{student.passportNo || student.passportOrNric || "—"}</span>
                 </div>
                 <div className="flex justify-between border-b border-brand-border/40 py-1">
                   <span className="text-text-muted">FIN No / Pass:</span>
-                  <span className="font-mono font-semibold text-text-primary">{student.finNumber || "N/A"}</span>
+                  <span className="font-mono font-semibold text-text-primary">{student.finNumber || "—"}</span>
                 </div>
                 <div className="flex justify-between border-b border-brand-border/40 py-1">
                   <span className="text-text-muted">Date of Birth:</span>
-                  <span className="font-mono font-semibold text-text-primary">{student.dateOfBirth || "N/A"}</span>
+                  <span className="font-mono font-semibold text-text-primary">{student.dateOfBirth || "—"}</span>
                 </div>
                 <div className="flex justify-between border-b border-brand-border/40 py-1">
                   <span className="text-text-muted">Gender:</span>
-                  <span className="font-semibold text-text-primary">{student.gender || "N/A"}</span>
+                  <span className="font-semibold text-text-primary">{student.gender || "—"}</span>
                 </div>
                 <div className="flex justify-between border-b border-brand-border/40 py-1">
                   <span className="text-text-muted">Nationality:</span>
-                  <span className="font-semibold text-text-primary">{student.nationality || "N/A"} ({student.country || "India"})</span>
+                  <span className="font-semibold text-text-primary">{student.nationality || "—"} ({student.country || "—"})</span>
                 </div>
                 <div className="flex justify-between border-b border-brand-border/40 py-1">
                   <span className="text-text-muted">Phone:</span>
-                  <span className="font-mono font-semibold text-text-primary">{student.singaporePhone || student.phone || "N/A"}</span>
+                  <span className="font-mono font-semibold text-text-primary">{student.singaporePhone || student.phone || "—"}</span>
                 </div>
                 <div className="flex justify-between py-1">
                   <span className="text-text-muted">Email:</span>
-                  <span className="font-semibold text-text-primary">{student.email || "N/A"}</span>
+                  <span className="font-semibold text-text-primary">{student.email || "—"}</span>
                 </div>
               </div>
             </div>
@@ -240,7 +240,7 @@ export const PrintStudentProfileModal: React.FC<PrintStudentProfileModalProps> =
                 </div>
                 <div className="flex justify-between py-1">
                   <span className="text-text-muted">Payment Status:</span>
-                  <span className="font-bold uppercase text-amber-700">{student.paymentStatus || "pending"}</span>
+                  <span className="font-bold uppercase text-amber-700">{student.paymentStatus || "—"}</span>
                 </div>
               </div>
             </div>
@@ -254,19 +254,19 @@ export const PrintStudentProfileModal: React.FC<PrintStudentProfileModalProps> =
               <div className="space-y-1.5">
                 <div className="flex justify-between border-b border-brand-border/40 py-1">
                   <span className="text-text-muted">Guardian Name:</span>
-                  <span className="font-semibold text-text-primary">{student.guardianName || "N/A"}</span>
+                  <span className="font-semibold text-text-primary">{student.guardianName || "—"}</span>
                 </div>
                 <div className="flex justify-between border-b border-brand-border/40 py-1">
                   <span className="text-text-muted">Guardian NRIC:</span>
-                  <span className="font-mono font-semibold text-text-primary">{student.guardianNric || "N/A"}</span>
+                  <span className="font-mono font-semibold text-text-primary">{student.guardianNric || "—"}</span>
                 </div>
                 <div className="flex justify-between border-b border-brand-border/40 py-1">
                   <span className="text-text-muted">Representative:</span>
-                  <span className="font-semibold text-text-primary">{student.representative || "NONE"}</span>
+                  <span className="font-semibold text-text-primary">{student.representative || "—"}</span>
                 </div>
                 <div className="flex justify-between py-1">
                   <span className="text-text-muted">Authorized Agent:</span>
-                  <span className="font-semibold text-text-primary">{student.agent || "TEMP AGENT"}</span>
+                  <span className="font-semibold text-text-primary">{student.agent || "—"}</span>
                 </div>
               </div>
             </div>
@@ -276,7 +276,7 @@ export const PrintStudentProfileModal: React.FC<PrintStudentProfileModalProps> =
           <div className="mt-8 flex items-end justify-between border-t border-brand-border/60 pt-6 text-[11px] text-text-muted">
             <div>
               <p>Generated by Avis AMS Academic Registry System</p>
-              <p className="mt-0.5">Enrolled: {student.enrolledAt || "August 3, 2026"} • Last Updated: {student.editedAt || "November 9, 2026"}</p>
+              <p className="mt-0.5">Enrolled: {student.enrolledAt || "—"} • Last Updated: {student.editedAt || "—"}</p>
             </div>
             <div className="w-48 text-center">
               <div className="border-b border-dashed border-text-muted/60 pb-8" />

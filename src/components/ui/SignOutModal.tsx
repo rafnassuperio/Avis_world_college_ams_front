@@ -5,7 +5,7 @@ import { LogOut, X, ShieldAlert, ShieldCheck, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAppStore } from "@/store/useAppStore";
 import { useAuthStore } from "@/store/useAuthStore";
-import { currentUser as defaultUser } from "@/data/mockData";
+import { emptyUser as defaultUser } from "@/store/useAuthStore";
 import { UserProfile } from "@/types";
 import { ROUTES } from "@/app/routes";
 import { toast } from "@/components/common/ToastMessage";

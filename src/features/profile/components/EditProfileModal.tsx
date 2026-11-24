@@ -33,21 +33,21 @@ export interface EditProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   user: UserProfile;
-  onSave: (updatedProfile: Partial<UserProfile>) => void;
+  onSave: (updatedProfile: Partial<UserProfile> & { currentPassword?: string }) => void | boolean | Promise<void | boolean>;
   onResetDefaults?: () => void;
 }
 
 export const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onClose, user, onSave, onResetDefaults }) => {
   const [formData, setFormData] = useState<Partial<UserProfile>>({
-    name: user.name || "Avis World College",
-    email: user.email || "acetek1@example.com",
-    role: user.role || "super-admin",
-    city: user.city || "Kerala",
-    state: user.state || "acetek@example.com",
-    country: user.country || "India",
-    avatarUrl: user.avatarUrl || "/avis-emblem.png",
-    phone: user.phone || "+91 94471 23456",
-    department: user.department || "Central Administration",
+    name: user.name || "",
+    email: user.email || "",
+    role: user.role || "",
+    city: user.city || "",
+    state: user.state || "",
+    country: user.country || "",
+    avatarUrl: user.avatarUrl || "",
+    phone: user.phone || "",
+    department: user.department || "",
   });
 
   // Password change state
@@ -79,16 +79,16 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onCl
   useEffect(() => {
     if (isOpen) {
       setFormData({
-        name: user.name || "Avis World College",
-        email: user.email || "acetek1@example.com",
-        role: user.role || "super-admin",
-        city: user.city || "Kerala",
-        state: user.state || "acetek@example.com",
-        country: user.country || "India",
-        avatarUrl: user.avatarUrl || "/avis-emblem.png",
-        phone: user.phone || "+91 94471 23456",
-        department: user.department || "Central Administration",
-        bio: user.bio || "Apex institutional administration and management portal for Avis World College campus operations.",
+        name: user.name || "",
+        email: user.email || "",
+        role: user.role || "",
+        city: user.city || "",
+        state: user.state || "",
+        country: user.country || "",
+        avatarUrl: user.avatarUrl || "",
+        phone: user.phone || "",
+        department: user.department || "",
+        bio: user.bio || "",
       });
       setIsChangingPassword(false);
       setPasswordData({
@@ -222,7 +222,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onCl
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) {
       toast.error("Validation Failed", {
@@ -240,7 +240,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onCl
       // Security: Passwords must never be stored in browser localStorage / client profile cache.
       // In production, password changes are processed via a dedicated backend auth endpoint.
 
-      onSave(updatedData);
+      if (await onSave({ ...updatedData, ...(isChangingPassword ? { password: passwordData.newPassword, currentPassword: passwordData.currentPassword } : {}) }) === false) return;
 
       if (isChangingPassword) {
         toast.success("Profile & Password Updated", {
@@ -263,27 +263,10 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onCl
   };
 
   const handleReset = () => {
-    if (onResetDefaults) {
-      onResetDefaults();
-      toast.info("Profile Reset to Defaults", {
-        description: "Restored baseline Avis World College super-admin profile.",
-      });
-      onClose();
-    } else {
-      setFormData({
-        name: "Avis World College",
-        email: "acetek1@example.com",
-        role: "super-admin",
-        city: "Kerala",
-        state: "acetek@example.com",
-        country: "India",
-        avatarUrl: "/avis-emblem.png",
-        phone: "+91 94471 23456",
-        department: "Central Administration",
-        bio: "Apex institutional administration and management portal for Avis World College campus operations.",
-      });
-      setIsChangingPassword(false);
-    }
+    setFormData({ ...user });
+    setIsChangingPassword(false);
+    setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
+    onResetDefaults?.();
   };
 
   return (

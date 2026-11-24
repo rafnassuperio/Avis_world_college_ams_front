@@ -10,7 +10,7 @@ export interface ChangePhotoModalProps {
   onClose: () => void;
   currentPhoto: string;
   studentName: string;
-  onSavePhoto: (newUrl: string) => void;
+  onSavePhoto: (newUrl: string) => void | boolean | Promise<void | boolean>;
 }
 
 const PRESET_AVATARS = [
@@ -58,12 +58,12 @@ export const ChangePhotoModal: React.FC<ChangePhotoModalProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!photoUrl.trim()) {
       toast.error("Please provide an image URL or choose a file");
       return;
     }
-    onSavePhoto(photoUrl.trim());
+    if (await onSavePhoto(photoUrl.trim()) === false) return;
     toast.success("Student photo updated successfully");
     onClose();
   };

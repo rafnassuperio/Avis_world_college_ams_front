@@ -1,4 +1,8 @@
-import React, { useState, useMemo, useEffect } from "react";
+import { getPartnerApplications } from "@/services/reports";
+import { useApiQuery } from "@/hooks/useApiQuery";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
+import React, { useState, useMemo } from "react";
 import { StudentApplicationItem, PartnerKPIs } from "../types";
 import { Clock, DollarSign, TrendingUp, Calendar, Filter, RotateCcw } from "lucide-react";
 import { DataTable, ColumnDef } from "@/components/ui/Table";
@@ -9,41 +13,22 @@ import { cn } from "@/lib/utils";
 export interface PartnerPerformanceTabProps {
   partnerType: "agent" | "representative";
   partnerName: string;
-  applications: StudentApplicationItem[];
+  partnerId: string;
+  applicationCount: number;
   kpis: PartnerKPIs;
 }
 
-export const PartnerPerformanceTab: React.FC<PartnerPerformanceTabProps> = ({ partnerType: _partnerType, partnerName, applications, kpis }) => {
+export const PartnerPerformanceTab: React.FC<PartnerPerformanceTabProps> = ({ partnerType, partnerName, partnerId, applicationCount, kpis }) => {
   const [searchTerm, setSearchTerm] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(8);
-
-  // Reset page when search term changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm]);
-
-  const filteredApplications = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
-    if (!term) return applications;
-
-    return applications.filter((app) => {
-      const studentNameMatch = (app.studentName || "").toLowerCase().includes(term);
-      const studentIdMatch = (app.studentId || "").toLowerCase().includes(term);
-      const courseMatch = (app.course || app.program || "").toLowerCase().includes(term);
-      const intakeMatch = (app.intake || "").toLowerCase().includes(term);
-      const dateMatch = (app.date || app.appliedDate || "").toLowerCase().includes(term);
-      return studentNameMatch || studentIdMatch || courseMatch || intakeMatch || dateMatch;
-    });
-  }, [applications, searchTerm]);
-
-  // Paginated applications
-  const totalItems = filteredApplications.length;
+  const filters = useDebouncedValue(JSON.stringify({type: partnerType === "agent" ? "Agent" : "Representative", partnerId, search: searchTerm.trim() || undefined, limit: pageSize}));
+  const [paging, setPaging] = useState({filters: "", page: 1});
+  const currentPage = paging.filters === filters ? paging.page : 1;
+  const setCurrentPage = (page: number) => setPaging({filters, page});
+  const query = useApiQuery(signal => getPartnerApplications({...JSON.parse(filters), page: currentPage}, signal), [filters, currentPage]);
+  const totalItems = query.data?.total || 0;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const paginatedApplications = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredApplications.slice(start, start + pageSize);
-  }, [filteredApplications, currentPage, pageSize]);
+  const paginatedApplications = query.data?.data || [];
 
   const getStatusBadge = (status?: StudentApplicationItem["status"]) => {
     switch (status) {
@@ -148,6 +133,8 @@ export const PartnerPerformanceTab: React.FC<PartnerPerformanceTabProps> = ({ pa
     [],
   );
 
+  if ((!query.data && query.loading) || query.error) return <AsyncStateView isLoading={query.loading} error={query.error} onRetry={() => void query.reload()}>{null}</AsyncStateView>;
+
   return (
     <div className="space-y-6">
       {/* 1. Performance Commission Overview Cards */}
@@ -230,8 +217,8 @@ export const PartnerPerformanceTab: React.FC<PartnerPerformanceTabProps> = ({ pa
             <div className="flex items-center gap-1.5 text-text-muted">
               <Filter className="h-3.5 w-3.5 text-burgundy-primary" />
               <span>
-                Showing <strong className="text-text-primary">{filteredApplications.length}</strong> of{" "}
-                <strong className="text-text-primary">{applications.length}</strong> records
+                Showing <strong className="text-text-primary">{totalItems}</strong> of{" "}
+                <strong className="text-text-primary">{applicationCount}</strong> records
               </span>
               <button
                 type="button"
@@ -264,7 +251,7 @@ export const PartnerPerformanceTab: React.FC<PartnerPerformanceTabProps> = ({ pa
         />
 
         {/* Pagination Controls */}
-        {filteredApplications.length > 0 && (
+        {totalItems > 0 && (
           <div className="pt-2">
             <Pagination
               currentPage={currentPage}

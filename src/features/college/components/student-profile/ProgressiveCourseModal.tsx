@@ -9,7 +9,7 @@ export interface ProgressiveCourseModalProps {
   onClose: () => void;
   currentCourseType?: string;
   studentName: string;
-  onSave: (newCourseType: string) => void;
+  onSave: (newCourseType: string) => void | boolean | Promise<void | boolean>;
 }
 
 const COURSE_TYPE_OPTIONS: FilterSelectOption[] = [
@@ -48,9 +48,9 @@ export const ProgressiveCourseModal: React.FC<ProgressiveCourseModalProps> = ({
 }) => {
   const [selectedCourseType, setSelectedCourseType] = useState(currentCourseType);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(selectedCourseType);
+    if (await onSave(selectedCourseType) === false) return;
     onClose();
   };
 

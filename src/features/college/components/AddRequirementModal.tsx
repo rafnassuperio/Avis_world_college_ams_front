@@ -8,7 +8,7 @@ import { toast } from "@/components/common/ToastMessage";
 export interface AddRequirementModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddRequirement: (description: string) => void;
+  onAddRequirement: (description: string) => void | boolean | Promise<void | boolean>;
 }
 
 export const AddRequirementModal: React.FC<AddRequirementModalProps> = ({ isOpen, onClose, onAddRequirement }) => {
@@ -19,7 +19,7 @@ export const AddRequirementModal: React.FC<AddRequirementModalProps> = ({ isOpen
     onClose();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = requirementText.trim();
     if (!trimmed) {
@@ -27,7 +27,7 @@ export const AddRequirementModal: React.FC<AddRequirementModalProps> = ({ isOpen
       return;
     }
 
-    onAddRequirement(sanitizeInput(trimmed));
+    if (await onAddRequirement(sanitizeInput(trimmed)) === false) return;
     setRequirementText("");
     onClose();
   };

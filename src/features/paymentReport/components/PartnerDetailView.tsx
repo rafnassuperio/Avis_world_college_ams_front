@@ -15,7 +15,10 @@ import {
   Receipt,
 } from "lucide-react";
 import { AgentRepReportRecord } from "../types";
-import { mockPaymentReportList } from "../data/mockPaymentReportData";
+import { getFinanceLedger } from "@/services/reports";
+import { useApiQuery } from "@/hooks/useApiQuery";
+import { Pagination } from "@/components/ui/Pagination";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { cn } from "@/lib/utils";
 
 interface PartnerDetailViewProps {
@@ -28,8 +31,12 @@ export const PartnerDetailView: React.FC<PartnerDetailViewProps> = ({ partner, e
 
   const isAgent = entityType === "Agent";
 
-  // Filter student transactions referring to this agent or representative
-  const associatedTransactions = mockPaymentReportList.filter((item) => (isAgent ? item.agentName === partner.name : item.repName === partner.name));
+  const key = entityType + partner.id;
+  const [paging, setPaging] = useState({key: "", page: 1});
+  const page = paging.key === key ? paging.page : 1;
+  const query = useApiQuery(signal => getFinanceLedger({type: entityType, partnerId: partner.id, page, limit: 8}, signal), [key, page]);
+  const associatedTransactions = query.data?.data || [];
+  const total = query.data?.total || 0;
 
   const handleCopy = (text: string, field: "email" | "phone") => {
     navigator.clipboard.writeText(text);
@@ -246,13 +253,13 @@ export const PartnerDetailView: React.FC<PartnerDetailViewProps> = ({ partner, e
           <div className="flex items-center gap-2">
             <Receipt className="h-4 w-4 text-burgundy-primary" />
             <h3 className="text-xs font-bold uppercase tracking-wider text-text-primary">
-              Referred Candidate Settlements ({associatedTransactions.length})
+              Referred Candidate Settlements ({total})
             </h3>
           </div>
           <span className="text-[11px] text-text-muted">Lifetime referrals: {partner.studentsReferredCount} candidates</span>
         </div>
 
-        {associatedTransactions.length === 0 ? (
+        {query.loading || query.error ? <AsyncStateView isLoading={query.loading} error={query.error} onRetry={() => void query.reload()}>{null}</AsyncStateView> : associatedTransactions.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-8 text-center">
             <GraduationCap className="h-8 w-8 text-text-muted" />
             <p className="mt-2 text-xs font-semibold text-text-primary">No active tranche settlements</p>
@@ -315,6 +322,7 @@ export const PartnerDetailView: React.FC<PartnerDetailViewProps> = ({ partner, e
             </table>
           </div>
         )}
+        {total > 8 && <Pagination currentPage={page} totalPages={Math.ceil(total / 8)} onPageChange={page => setPaging({key, page})} totalItems={total} pageSize={8} showTotal />}
       </div>
     </div>
   );

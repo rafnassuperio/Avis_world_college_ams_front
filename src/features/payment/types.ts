@@ -31,6 +31,14 @@ export interface PaymentHistoryItem {
 }
 
 export interface PaymentRecord {
+  agentId?: string;
+  repId?: string;
+  adminCommission?: number;
+  outstandingAmount?: number;
+  applicationFees?: number;
+  feeBreakdown?: Record<string, number>;
+  otherPayments?: Array<{ _id: string; name: string; amount: number; status: string }>;
+  installmentTracking?: Array<{ installmentNo: number; amount: number; paidAmount: number }>;
   id: string;
   no: string;
   date: string;

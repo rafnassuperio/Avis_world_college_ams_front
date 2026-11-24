@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import {
   Search,
@@ -15,7 +15,10 @@ import {
   UserPlus,
   UploadCloud,
 } from "lucide-react";
-import { initialStudentsData } from "../../data/collegeTabData";
+import { students as studentsRepository, getStudentRegistryPage, getStudentRegistryOptions, apiMessage } from "@/services/ams";
+import { useApiQuery } from "@/hooks/useApiQuery";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { CollegeStudent } from "../../types";
 import { DataTable, ColumnDef } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
@@ -28,7 +31,7 @@ import { SearchInput } from "@/components/ui/SearchInput";
 import { Pagination } from "@/components/ui/Pagination";
 import { toast } from "@/components/common/ToastMessage";
 import { cn } from "@/lib/utils";
-import { safeStorage } from "@/lib/security";
+
 import { useAppStore } from "@/store/useAppStore";
 import countryData from "@/data/country.json";
 
@@ -127,12 +130,9 @@ export interface StudentsTabProps {
   onAddStudent?: (student: CollegeStudent) => void;
 }
 
-const STUDENTS_STORAGE_KEY = "ams_college_students_list";
 
-export const StudentsTab: React.FC<StudentsTabProps> = ({ students = initialStudentsData, className, statusFilter, onDelete, onAddStudent }) => {
-  const [studentList, setStudentList] = useState<CollegeStudent[]>(() => {
-    return safeStorage.getItem<CollegeStudent[]>(STUDENTS_STORAGE_KEY, students);
-  });
+
+export const StudentsTab: React.FC<StudentsTabProps> = ({ className, statusFilter, onDelete, onAddStudent }) => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isBulkUploadModalOpen, setIsBulkUploadModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -146,27 +146,10 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({ students = initialStud
   const [selectedCountry, setSelectedCountry] = useState<string>("All Countries");
 
   // Reusable Pagination States
-  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pagination, setPagination] = useState({ page: 1, filters: "" });
   const [pageSize, setPageSize] = useState<number>(8);
 
   const [studentToDelete, setStudentToDelete] = useState<CollegeStudent | null>(null);
-
-  // Sync with prop updates if external data changes
-  useEffect(() => {
-    if (students && students.length > 0) {
-      setStudentList(students);
-    }
-  }, [students]);
-
-  // Listen for global bulk upload updates
-  useEffect(() => {
-    const handleStorageSync = () => {
-      const stored = safeStorage.getItem<CollegeStudent[]>(STUDENTS_STORAGE_KEY, initialStudentsData);
-      setStudentList(stored);
-    };
-    window.addEventListener("ams_students_updated", handleStorageSync);
-    return () => window.removeEventListener("ams_students_updated", handleStorageSync);
-  }, []);
 
   // Open add student modal automatically when triggered via quick actions
   useEffect(() => {
@@ -179,40 +162,6 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({ students = initialStud
       // Storage fallback
     }
   }, []);
-
-  // Unique courses from student registry
-  const availableCourses = useMemo(() => {
-    const courses = new Set<string>();
-    studentList.forEach((s) => {
-      if (s.course) courses.add(s.course);
-    });
-    return Array.from(courses).sort((a, b) => a.localeCompare(b));
-  }, [studentList]);
-
-  // Unique intakes from student registry
-  const availableIntakes = useMemo(() => {
-    const intakes = new Set<string>();
-    studentList.forEach((s) => {
-      if (s.intake) intakes.add(s.intake);
-    });
-    return Array.from(intakes).sort((a, b) => a.localeCompare(b));
-  }, [studentList]);
-
-  // Unique enrollment years from student registry
-  const availableYears = useMemo(() => {
-    const years = new Set<string>();
-    studentList.forEach((s) => {
-      const dateStr = s.enrollmentDate || s.joinedDate || s.admissionDate;
-      const { year } = getEnrollmentDateParts(dateStr);
-      if (year) years.add(year);
-    });
-    if (years.size === 0) {
-      years.add("2026");
-      years.add("2025");
-      years.add("2024");
-    }
-    return Array.from(years).sort((a, b) => b.localeCompare(a));
-  }, [studentList]);
 
   // Determine active student type filter: from CollegeTabs prop if present
   const effectiveTypeFilter = useMemo(() => {
@@ -232,75 +181,45 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({ students = initialStud
     return "All";
   }, [statusFilter]);
 
-  // Reset pagination to first page when search or any filter changes
-  React.useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, selectedCourse, selectedIntake, selectedStatus, selectedMonth, selectedYear, selectedCountry, effectiveTypeFilter]);
-
-  // Filter students by search, type, and the 6 specific filters
-  const filteredStudents = useMemo(() => {
-    return studentList.filter((student) => {
-      // Search matching across multiple fields
-      const query = searchQuery.trim().toLowerCase();
-      const matchesSearch =
-        !query ||
-        student.name.toLowerCase().includes(query) ||
-        student.studentId.toLowerCase().includes(query) ||
-        student.email.toLowerCase().includes(query) ||
-        (student.passportOrNric && student.passportOrNric.toLowerCase().includes(query)) ||
-        (student.country && student.country.toLowerCase().includes(query)) ||
-        (student.location && student.location.toLowerCase().includes(query)) ||
-        student.nationality.toLowerCase().includes(query) ||
-        student.course.toLowerCase().includes(query) ||
-        student.courseCode.toLowerCase().includes(query);
-
-      // Student type matching (International / Local / Overseas)
-      const matchesType =
-        effectiveTypeFilter === "All" ||
-        student.studentType?.toLowerCase() === effectiveTypeFilter.toLowerCase() ||
-        (effectiveTypeFilter === "International" && student.nationality !== "Mauritius") ||
-        (effectiveTypeFilter === "Local" && student.nationality === "Mauritius");
-
-      // 1. Filter by Course
-      const matchesCourse =
-        selectedCourse === "All Courses" ||
-        student.course.toLowerCase() === selectedCourse.toLowerCase() ||
-        student.courseCode.toLowerCase() === selectedCourse.toLowerCase();
-
-      // 2. Filter by Intakes
-      const matchesIntake = selectedIntake === "All Intakes" || student.intake.toLowerCase() === selectedIntake.toLowerCase();
-
-      // 3. Filter by Status
-      const matchesStatus =
-        selectedStatus === "All Status" || selectedStatus === "All" || student.status.toLowerCase() === selectedStatus.toLowerCase();
-
-      // 4 & 5. Enrollment Month & Year
-      const { month: studentMonth, year: studentYear } = getEnrollmentDateParts(
-        student.enrollmentDate || student.joinedDate || student.admissionDate,
-      );
-
-      const matchesMonth = selectedMonth === "All Months" || studentMonth.toLowerCase() === selectedMonth.toLowerCase();
-
-      const matchesYear = selectedYear === "All Years" || studentYear === selectedYear;
-
-      // 6. Filter by Country
-      const matchesCountry =
-        selectedCountry === "All Countries" ||
-        student.country?.toLowerCase() === selectedCountry.toLowerCase() ||
-        student.nationality?.toLowerCase() === selectedCountry.toLowerCase() ||
-        student.location?.toLowerCase().includes(selectedCountry.toLowerCase());
-
-      return matchesSearch && matchesType && matchesCourse && matchesIntake && matchesStatus && matchesMonth && matchesYear && matchesCountry;
-    });
-  }, [studentList, searchQuery, effectiveTypeFilter, selectedCourse, selectedIntake, selectedStatus, selectedMonth, selectedYear, selectedCountry]);
-
-  // Paginated students slice for current page
-  const totalItems = filteredStudents.length;
+  const filters = useDebouncedValue(JSON.stringify({
+    studentType: effectiveTypeFilter, search: searchQuery.trim(),
+    course: selectedCourse === "All Courses" ? "" : selectedCourse,
+    intake: selectedIntake === "All Intakes" ? "" : selectedIntake,
+    status: ["All Status", "All"].includes(selectedStatus) ? "" : selectedStatus,
+    month: selectedMonth === "All Months" ? "" : String(ENROLLMENT_MONTHS.indexOf(selectedMonth as typeof ENROLLMENT_MONTHS[number]) + 1),
+    year: selectedYear === "All Years" ? "" : selectedYear,
+    country: selectedCountry === "All Countries" ? "" : selectedCountry,
+  }));
+  const currentPage = pagination.filters === filters ? pagination.page : 1;
+  const setCurrentPage = (page: number) => setPagination({ page, filters });
+  const { data, loading, error, reload } = useApiQuery(
+    signal => getStudentRegistryPage({ ...JSON.parse(filters), page: currentPage, limit: pageSize }, signal), [filters, currentPage, pageSize]);
+  const options = useApiQuery(signal => getStudentRegistryOptions(effectiveTypeFilter, signal), [effectiveTypeFilter]);
+  const availableCourses = options.data?.courses || [];
+  const availableIntakes = options.data?.intakes || [];
+  const availableYears = options.data?.years || [];
+  const filteredStudents = data?.records || [];
+  const paginatedStudents = filteredStudents;
+  const totalItems = data?.total || 0;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const paginatedStudents = useMemo(() => {
-    const startIndex = (currentPage - 1) * pageSize;
-    return filteredStudents.slice(startIndex, startIndex + pageSize);
-  }, [filteredStudents, currentPage, pageSize]);
+  useEffect(() => { if (!loading && data && currentPage > totalPages) setCurrentPage(totalPages); }, [data, loading, currentPage, totalPages]);
+  const mutating = useRef(false);
+  useEffect(() => {
+    const refresh = (event: Event) => { if (!mutating.current && (event as CustomEvent).detail === "students") { void reload(); void options.reload(); } };
+    window.addEventListener("ams-data-updated", refresh);
+    return () => window.removeEventListener("ams-data-updated", refresh);
+  }, [reload, options.reload]);
+  const mutate = async (action: () => Promise<void>) => {
+    if (mutating.current) return false;
+    mutating.current = true;
+    try {
+      await action();
+      await Promise.all([reload(), options.reload()]);
+      window.dispatchEvent(new CustomEvent("ams-data-updated", { detail: "students" }));
+      return true;
+    } catch (error) { toast.error("Unable to save changes", { description: apiMessage(error) }); return false; }
+    finally { mutating.current = false; }
+  };
 
   // Determine active filter count
   const isCourseFiltered = selectedCourse !== "All Courses";
@@ -333,13 +252,11 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({ students = initialStud
   };
 
   // Handle student deletion
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!studentToDelete) return;
 
     const target = studentToDelete;
-    const updated = studentList.filter((s) => s.id !== target.id);
-    setStudentList(updated);
-    safeStorage.setItem(STUDENTS_STORAGE_KEY, updated);
+    if (!await mutate(() => studentsRepository.remove(target.id))) return false;
     onDelete?.(target.id);
     useAppStore.getState().addActivity({
       id: `act-${Date.now()}`,
@@ -364,10 +281,8 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({ students = initialStud
   };
 
   // Handle new student enrollment
-  const handleAddStudent = (newStudent: CollegeStudent) => {
-    const updated = [newStudent, ...studentList];
-    setStudentList(updated);
-    safeStorage.setItem(STUDENTS_STORAGE_KEY, updated);
+  const handleAddStudent = async (newStudent: CollegeStudent) => {
+    if (!await mutate(() => studentsRepository.save(newStudent, true))) return false;
     onAddStudent?.(newStudent);
     useAppStore.getState().addActivity({
       id: `act-${Date.now()}`,
@@ -443,7 +358,7 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({ students = initialStud
         cell: (student) => (
           <div className="flex justify-center">
             <Link
-              to={`/college/students/${student.studentId || student.id}`}
+              to={`/college/students/${student.id}`}
               title={`View ${student.name}'s profile`}
             >
               <Avatar
@@ -465,7 +380,7 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({ students = initialStud
         cell: (student) => (
           <div className="flex flex-col gap-0.5">
             <Link
-              to={`/college/students/${student.studentId || student.id}`}
+              to={`/college/students/${student.id}`}
               className="font-bold text-text-primary transition-colors hover:text-burgundy-primary hover:underline"
             >
               {student.name}
@@ -597,6 +512,8 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({ students = initialStud
     ],
     [currentPage, pageSize],
   );
+
+  if ((!data && loading) || error || options.error) return <AsyncStateView isLoading={loading} error={error || options.error} onRetry={() => { void reload(); void options.reload(); }}>{null}</AsyncStateView>;
 
   return (
     <div className={cn("space-y-4", className)}>
@@ -895,7 +812,7 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({ students = initialStud
             setPageSize(newSize);
             setCurrentPage(1);
           }}
-          pageSizeOptions={[5, 10, 20]}
+          pageSizeOptions={[5, 8, 10, 20]}
           showTotal={true}
           showPageSize={true}
         />
@@ -952,11 +869,7 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({ students = initialStud
         <BulkUploadModal
           isOpen={isBulkUploadModalOpen}
           onClose={() => setIsBulkUploadModalOpen(false)}
-          onSuccess={(newStudents) => {
-            const updated = [...newStudents, ...studentList];
-            setStudentList(updated);
-            safeStorage.setItem(STUDENTS_STORAGE_KEY, updated);
-          }}
+          onSuccess={() => { void reload(); void options.reload(); }}
         />
       )}
     </div>

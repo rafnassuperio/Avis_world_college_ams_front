@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { CreditCard, CheckCircle2, Download, FileText, ShieldCheck, Receipt } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
-import { toast } from "@/components/common/ToastMessage";
+import { downloadPaymentReceipt, downloadPaymentStatement } from "@/services/payments";
 import { PaymentRecord } from "../types";
 import { cn } from "@/lib/utils";
 
@@ -18,13 +18,9 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({ isOpen
 
   const totalPaid = record.history.filter((h) => h.status === "Successful" || h.status === "Settled").reduce((acc, curr) => acc + curr.amount, 0);
 
-  const balance = Math.max(0, record.totalFee - totalPaid);
+  const balance = record.outstandingAmount ?? Math.max(0, record.totalFee - totalPaid);
 
-  const handleDownloadStatement = () => {
-    toast.success("Statement Exported", {
-      description: `Full payment ledger statement for ${record.student.name} has been generated.`,
-    });
-  };
+  const handleDownloadStatement = () => { downloadPaymentStatement(record); };
 
   return (
     <Modal
@@ -244,11 +240,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({ isOpen
                               whileHover={{ scale: 1.02 }}
                               whileTap={{ scale: 0.97 }}
                               type="button"
-                              onClick={() => {
-                                toast.success("Course Fee Receipt", {
-                                  description: `Course fee receipt downloaded for ${record.student.name} (${item.receiptNo}).`,
-                                });
-                              }}
+                              onClick={() => { void downloadPaymentReceipt(item.id); }}
                               className="shadow-2xs hover:shadow-xs inline-flex w-full max-w-[155px] items-center justify-center rounded-lg bg-gradient-to-r from-brand-red to-burgundy-primary px-3 py-1.5 text-[11px] font-bold text-white transition-all hover:brightness-110 active:scale-95"
                               title="Download Course Fee Receipt"
                             >
@@ -258,11 +250,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({ isOpen
                               whileHover={{ scale: 1.02 }}
                               whileTap={{ scale: 0.97 }}
                               type="button"
-                              onClick={() => {
-                                toast.success("Application Fee Receipt", {
-                                  description: `Application fee receipt downloaded for ${record.student.name} (${item.receiptNo}).`,
-                                });
-                              }}
+                              onClick={() => { void downloadPaymentReceipt(item.id); }}
                               className="shadow-2xs hover:shadow-xs inline-flex w-full max-w-[155px] items-center justify-center rounded-lg bg-burgundy-dark px-3 py-1.5 text-[11px] font-bold text-white transition-all hover:bg-palette-midnight active:scale-95"
                               title="Download Application Fee Receipt"
                             >

@@ -1,36 +1,44 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ShieldCheck, Search, Maximize2, Minimize2, RotateCcw, Save, Info, CheckCheck, Ban } from "lucide-react";
 import { AccessRoleModuleItem, PermissionAction } from "../types";
-import { defaultAccessRoleModules } from "../data/mockAccessRoles";
+import { defaultAccessRoleModules } from "../data/accessModules";
 import { AccessRolesModuleCard } from "./AccessRolesModuleCard";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/common/ToastMessage";
-import { safeStorage } from "@/lib/security";
+import { getProfile, permissionResources, permissionActions } from "@/services/profile";
+import { apiClient } from "@/services/api/apiClient";
+import { apiMessage } from "@/services/ams";
+import { useAuthStore } from "@/store/useAuthStore";
+import { useApiQuery } from "@/hooks/useApiQuery";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { cn } from "@/lib/utils";
 
-const ACCESS_ROLES_STORAGE_KEY = "ams_access_roles_modules_v1";
+
 
 export interface AccessRolesSectionProps {
   className?: string;
+  adminId: string;
 }
 
-export const AccessRolesSection: React.FC<AccessRolesSectionProps> = ({ className }) => {
-  const [modules, setModules] = useState<AccessRoleModuleItem[]>(() => {
-    return safeStorage.getItem<AccessRoleModuleItem[]>(ACCESS_ROLES_STORAGE_KEY, defaultAccessRoleModules);
-  });
+export const AccessRolesSection: React.FC<AccessRolesSectionProps> = ({ className, adminId }) => {
+  const { data, loading, error, reload } = useApiQuery(() => getProfile(adminId), [adminId]);
+  const isSuper = data?.admin.type === "super-admin";
+  const canEdit = useAuthStore(state => state.user.role === "super-admin") && !isSuper;
+  const [modules, setModules] = useState<AccessRoleModuleItem[]>([]);
+  useEffect(() => {
+    if (!data) return;
+    setModules(defaultAccessRoleModules.map(module => {
+      const resource = permissionResources[module.id];
+      const actions = permissionActions[resource] || {};
+      return { ...module, availableActions: Object.keys(actions) as PermissionAction[], readOnly: !canEdit,
+        permissions: Object.fromEntries(["view", "add", "edit", "update", "delete"].map(action => [action, Boolean(actions[action] && (isSuper || data.admin.accessPermissions?.[resource]?.[actions[action]]))])) as unknown as AccessRoleModuleItem["permissions"] };
+    }));
+  }, [data, canEdit, isSuper]);
 
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [isSaved, setIsSaved] = useState(true);
-
-  // Calculate statistics
-  const totalPermissions = modules.length * 5;
-  const activePermissions = useMemo(() => {
-    return modules.reduce((total, mod) => {
-      return total + Object.values(mod.permissions).filter(Boolean).length;
-    }, 0);
-  }, [modules]);
 
   // Toggle single module accordion
   const handleToggleExpand = (id: string) => {
@@ -57,6 +65,7 @@ export const AccessRolesSection: React.FC<AccessRolesSectionProps> = ({ classNam
 
   // Toggle specific permission (view, add, edit, update, delete)
   const handleTogglePermission = (moduleId: string, action: PermissionAction) => {
+    if (!canEdit || !modules.find(m => m.id === moduleId)?.availableActions?.includes(action)) return;
     setModules((prev) =>
       prev.map((mod) => {
         if (mod.id === moduleId) {
@@ -76,17 +85,18 @@ export const AccessRolesSection: React.FC<AccessRolesSectionProps> = ({ classNam
 
   // Toggle all permissions for a specific module
   const handleToggleAllForModule = (moduleId: string, enabled: boolean) => {
+    if (!canEdit) return;
     setModules((prev) =>
       prev.map((mod) => {
         if (mod.id === moduleId) {
           return {
             ...mod,
             permissions: {
-              view: enabled,
-              add: enabled,
-              edit: enabled,
-              update: enabled,
-              delete: enabled,
+              view: enabled && Boolean(permissionActions[permissionResources[mod.id]]?.view),
+              add: enabled && Boolean(permissionActions[permissionResources[mod.id]]?.add),
+              edit: enabled && Boolean(permissionActions[permissionResources[mod.id]]?.edit),
+              update: enabled && Boolean(permissionActions[permissionResources[mod.id]]?.update),
+              delete: enabled && Boolean(permissionActions[permissionResources[mod.id]]?.delete),
             },
           };
         }
@@ -96,52 +106,30 @@ export const AccessRolesSection: React.FC<AccessRolesSectionProps> = ({ classNam
     setIsSaved(false);
   };
 
-  // Global Grant All
   const handleGrantAll = () => {
-    setModules((prev) =>
-      prev.map((mod) => ({
-        ...mod,
-        permissions: { view: true, add: true, edit: true, update: true, delete: true },
-      })),
-    );
+    if (!canEdit) return;
+    setModules(prev => prev.map(m => ({ ...m, permissions: Object.fromEntries(Object.keys(m.permissions).map(action => [action, m.availableActions?.includes(action as PermissionAction) || false])) as unknown as AccessRoleModuleItem["permissions"] })));
     setIsSaved(false);
-    toast.info("Granted All Permissions", {
-      description: "All 90 operational permissions across all 18 modules have been enabled.",
-    });
   };
-
-  // Global Revoke All
   const handleRevokeAll = () => {
-    setModules((prev) =>
-      prev.map((mod) => ({
-        ...mod,
-        permissions: { view: false, add: false, edit: false, update: false, delete: false },
-      })),
-    );
+    if (!canEdit) return;
+    setModules(prev => prev.map(m => ({ ...m, permissions: { view: false, add: false, edit: false, update: false, delete: false } })));
     setIsSaved(false);
-    toast.warning("Permissions Revoked", {
-      description: "All modules have been set to restricted state.",
-    });
   };
-
-  // Save changes to local storage
-  const handleSave = () => {
-    safeStorage.setItem(ACCESS_ROLES_STORAGE_KEY, modules);
-    setIsSaved(true);
-    toast.success("Access Roles Saved Successfully", {
-      description: `${activePermissions} of ${totalPermissions} permissions persisted for your admin profile.`,
-    });
+  const handleSave = async () => {
+    if (!canEdit || !data) return;
+    const permissions = structuredClone(data.admin.accessPermissions || {});
+    for (const module of modules) {
+      const resource = permissionResources[module.id];
+      permissions[resource] ||= {};
+      for (const [action, field] of Object.entries(permissionActions[resource] || {})) permissions[resource][field] = module.permissions[action as PermissionAction];
+    }
+    try {
+      await apiClient.put(`/api/admin/avis-profile/${adminId}/permissions`, { permissions });
+      setIsSaved(true); await reload(); toast.success("Access roles saved.");
+    } catch (error) { toast.error("Unable to save permissions", { description: apiMessage(error) }); }
   };
-
-  // Reset to default
-  const handleResetDefaults = () => {
-    setModules(defaultAccessRoleModules);
-    safeStorage.setItem(ACCESS_ROLES_STORAGE_KEY, defaultAccessRoleModules);
-    setIsSaved(true);
-    toast.info("Reset to Default Permissions", {
-      description: "Default Super Admin full access configuration restored.",
-    });
-  };
+  const handleResetDefaults = () => { void reload(); setIsSaved(true); };
 
   // Filter modules based on search query
   const filteredModules = useMemo(() => {
@@ -166,6 +154,8 @@ export const AccessRolesSection: React.FC<AccessRolesSectionProps> = ({ classNam
       rightColumnModules: filteredModules.slice(9, 18),
     };
   }, [filteredModules, searchQuery]);
+
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
 
   return (
     <div className={cn("space-y-5", className)}>

@@ -134,7 +134,7 @@ export const AccessRolesModuleCard: React.FC<AccessRolesModuleCardProps> = ({
   const IconComponent = getModuleIcon(module.iconName);
 
   const activeCount = Object.values(module.permissions).filter(Boolean).length;
-  const isAllActive = activeCount === 5;
+  const isAllActive = activeCount === (module.availableActions?.length || 5);
   const isNoneActive = activeCount === 0;
 
   return (
@@ -230,6 +230,7 @@ export const AccessRolesModuleCard: React.FC<AccessRolesModuleCardProps> = ({
                   <ToggleSwitch
                     size="sm"
                     checked={isAllActive}
+                    disabled={module.readOnly}
                     onChange={(checked) => onToggleAll(checked)}
                     showIcons={true}
                     ariaLabel={`Toggle all permissions for ${module.name}`}
@@ -295,6 +296,7 @@ export const AccessRolesModuleCard: React.FC<AccessRolesModuleCardProps> = ({
                         <ToggleSwitch
                           size="sm"
                           checked={isChecked}
+                          disabled={module.readOnly || !module.availableActions?.includes(perm.key)}
                           onChange={() => onTogglePermission(perm.key)}
                           activeColor={perm.activeColor}
                           showIcons={true}

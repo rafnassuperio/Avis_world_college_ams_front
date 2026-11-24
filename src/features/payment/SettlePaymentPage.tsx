@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { Download, ArrowLeft, ExternalLink, AlertCircle, User, GraduationCap, FileText, Layers } from "lucide-react";
@@ -6,8 +6,10 @@ import BreadcrumbBanner from "@/components/common/BreadcrumbBanner";
 import { Button } from "@/components/ui/Button";
 import { Tabs, TabItem } from "@/components/ui/Tabs";
 import { toast } from "@/components/common/ToastMessage";
-import { getPaymentRecords, getPaymentRecordById } from "./utils/paymentStorage";
-import { PaymentRecord } from "./types";
+import { getPayment, downloadPaymentReceipt } from "@/services/payments";
+import { useApiQuery } from "@/hooks/useApiQuery";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
+
 import { dashboardContainerVariants, dashboardSectionVariants } from "@/components/animations/transitions";
 import { CourseFeesTab } from "./components/settle/CourseFeesTab";
 import { ApplicationFeesTab } from "./components/settle/ApplicationFeesTab";
@@ -23,32 +25,19 @@ export const SettlePaymentPage: React.FC = () => {
   // Active tab state
   const [activeTab, setActiveTab] = useState<SettleTabId>("course-fees");
 
-  // All payment records for selector / fallback
-  const [allRecords, setAllRecords] = useState<PaymentRecord[]>(() => getPaymentRecords());
-
-  const refreshRecords = useCallback(() => {
-    setAllRecords(getPaymentRecords());
-  }, []);
-
-  // Listen for storage updates
+  const { data: currentRecord, loading, error, reload: refreshRecords } = useApiQuery(() => {
+    if (!paymentId) return Promise.reject(new Error("Select a payment from the payment list."));
+    return getPayment(paymentId);
+  }, [paymentId]);
   useEffect(() => {
-    window.addEventListener("ams_payment_records_updated", refreshRecords);
-    return () => window.removeEventListener("ams_payment_records_updated", refreshRecords);
+    const refresh = () => { void refreshRecords(); };
+    window.addEventListener("ams_payment_records_updated", refresh);
+    return () => window.removeEventListener("ams_payment_records_updated", refresh);
   }, [refreshRecords]);
-
-  // Currently resolved payment record
-  const currentRecord = useMemo(() => {
-    if (paymentId) {
-      const found = getPaymentRecordById(paymentId);
-      if (found) return found;
-    }
-    // Fallback to first record if route ID not found or blank
-    return allRecords[0] || null;
-  }, [paymentId, allRecords]);
-
   const containerVariants = shouldReduceMotion ? { hidden: { opacity: 1 }, visible: { opacity: 1 } } : dashboardContainerVariants;
   const sectionVariants = shouldReduceMotion ? { hidden: { opacity: 1 }, visible: { opacity: 1 } } : dashboardSectionVariants;
 
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void refreshRecords()}>{null}</AsyncStateView>;
   if (!currentRecord) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center space-y-4 text-center">
@@ -79,7 +68,7 @@ export const SettlePaymentPage: React.FC = () => {
     )
     .reduce((sum, h) => sum + h.amount, 0);
 
-  const courseBalance = Math.max(0, currentRecord.totalFee - totalCoursePaid);
+  const courseBalance = currentRecord.outstandingAmount ?? Math.max(0, currentRecord.totalFee - totalCoursePaid);
 
   // Application fee settlement check
   const hasPaidAppFee = currentRecord.history.some(
@@ -89,14 +78,13 @@ export const SettlePaymentPage: React.FC = () => {
   );
 
   // Download receipt action
-  const handleDownloadReceipt = (receiptNo?: string, title: string = "Course Fee Receipt") => {
-    const recNumber = receiptNo || currentRecord.history[0]?.receiptNo || "REC-CURRENT";
-    toast.success(`${title} Downloaded`, {
-      description: `${title} (${recNumber}) for ${currentRecord.student.name} generated successfully.`,
-    });
+  const handleDownloadReceipt = (receiptNo?: string, _title?: string) => {
+    const transaction = receiptNo ? currentRecord.history.find(h => h.receiptNo === receiptNo) : currentRecord.history[0];
+    if (!transaction) { toast.info("No receipt has been recorded for this payment yet."); return; }
+    void downloadPaymentReceipt(transaction.id);
   };
 
-  const studentProfileUrl = `/college/students/${currentRecord.student.studentCode || currentRecord.student.id}`;
+  const studentProfileUrl = `/college/students/${currentRecord.student.id}`;
   const breadcrumbItems = [{ name: "Payment", path: "/payment" }, { name: `Settle Payment (${currentRecord.student.name})` }];
 
   // 3 Tabs requested: 1. Course Fees, 2. ApplicationFees, 3. Other Payment Option
@@ -121,7 +109,7 @@ export const SettlePaymentPage: React.FC = () => {
       label: "ApplicationFees",
       shortLabel: "Application",
       icon: FileText,
-      badge: hasPaidAppFee ? "Settled" : "SGD 109",
+      badge: hasPaidAppFee ? "Settled" : `${currentRecord.currency} ${currentRecord.applicationFees || 0}`,
       badgeVariant: hasPaidAppFee ? "success" : "neutral",
       content: (
         <ApplicationFeesTab
@@ -136,7 +124,7 @@ export const SettlePaymentPage: React.FC = () => {
       label: "Other Payment Option",
       shortLabel: "Other Options",
       icon: Layers,
-      badge: "8 Options",
+      badge: String(currentRecord.otherPayments?.length || 0),
       badgeVariant: "purple",
       content: (
         <OtherPaymentOptionsTab

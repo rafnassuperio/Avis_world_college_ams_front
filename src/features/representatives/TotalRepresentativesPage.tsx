@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import {
@@ -25,7 +25,9 @@ import { FilterSelect, FilterSelectOption } from "@/components/ui/FilterSelect";
 import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/ui/Pagination";
 import { dashboardContainerVariants, dashboardSectionVariants } from "@/components/animations/transitions";
-import { getRepresentativesList, saveRepresentativesList } from "./data/mockRepresentativesData";
+import { representatives } from "@/services/ams";
+import { useApiCollection } from "@/hooks/useApiCollection";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { RepresentativeItem } from "./types";
 import { ROUTES } from "@/app/routes";
 import { AddRepresentativeModal } from "./components/AddRepresentativeModal";
@@ -42,7 +44,7 @@ export const TotalRepresentativesPage: React.FC = () => {
   const sectionVariants = shouldReduceMotion ? { hidden: { opacity: 1 }, visible: { opacity: 1 } } : dashboardSectionVariants;
 
   // Master representatives state
-  const [representativesList, setRepresentativesList] = useState<RepresentativeItem[]>(() => getRepresentativesList());
+  const { data: representativesList, saveList: updateRepresentativesList, loading, error, reload } = useApiCollection(representatives);
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -60,35 +62,32 @@ export const TotalRepresentativesPage: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   // Persistence handler
-  const updateRepresentativesList = useCallback((updated: RepresentativeItem[]) => {
-    setRepresentativesList(updated);
-    saveRepresentativesList(updated);
-  }, []);
+
 
   // Add Representative
-  const handleAddRepresentative = (newRep: RepresentativeItem) => {
+  const handleAddRepresentative = async (newRep: RepresentativeItem) => {
     const updated = [newRep, ...representativesList];
-    updateRepresentativesList(updated);
+    if (!await updateRepresentativesList(updated)) return false;
     toast.success("Representative Added", {
       description: `${newRep.name} has been successfully added to the roster.`,
     });
   };
 
   // Edit Representative
-  const handleSaveRepresentative = (updatedRep: RepresentativeItem) => {
+  const handleSaveRepresentative = async (updatedRep: RepresentativeItem) => {
     const updated = representativesList.map((r) => (r.id === updatedRep.id ? updatedRep : r));
-    updateRepresentativesList(updated);
+    if (!await updateRepresentativesList(updated)) return false;
     toast.success("Profile Updated", {
       description: `Details for ${updatedRep.name} have been saved successfully.`,
     });
   };
 
   // Delete Representative
-  const handleDeleteRepresentative = () => {
+  const handleDeleteRepresentative = async () => {
     if (!selectedRepForDelete) return;
     const repToDelete = selectedRepForDelete;
     const updated = representativesList.filter((r) => r.id !== repToDelete.id);
-    updateRepresentativesList(updated);
+    if (!await updateRepresentativesList(updated)) return false;
 
     if (selectedRepForEdit?.id === repToDelete.id) {
       setSelectedRepForEdit(null);
@@ -363,6 +362,8 @@ export const TotalRepresentativesPage: React.FC = () => {
     ],
     [navigate, currentPage, pageSize],
   );
+
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
 
   return (
     <motion.div

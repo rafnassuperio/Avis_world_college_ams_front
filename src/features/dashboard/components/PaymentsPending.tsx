@@ -2,12 +2,17 @@ import React, { useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Eye, Check, Clock, AlertCircle, Calendar, Download, Building2, CheckCircle2 } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { smoothEase, incomingCardVariants, incomingCarouselVariants } from "@/components/animations/transitions";
-import { pendingPaymentCardsData } from "@/data/mockData";
+import { useAnalytics } from "@/services/analytics";
+import { useNavigate } from "react-router-dom";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { PendingPaymentCard } from "@/types";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 
 const PaymentsPendingComponent: React.FC = () => {
+  const navigate = useNavigate();
+  const { data, loading, error, reload } = useAnalytics();
+  const pendingPaymentCardsData = data?.pending || [];
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [selectedCard, setSelectedCard] = useState<PendingPaymentCard | null>(null);
   const [paymentSuccess, setPaymentSuccess] = useState<string | null>(null);
@@ -69,13 +74,11 @@ const PaymentsPendingComponent: React.FC = () => {
     }
   };
 
-  const handleQuickPaySuccess = (studentName: string) => {
-    setPaymentSuccess(`Payment receipt processed for ${studentName}`);
-    setTimeout(() => {
-      setPaymentSuccess(null);
-      setSelectedCard(null);
-    }, 1800);
+  const handleQuickPaySuccess = (_studentName: string) => {
+    if (selectedCard) navigate(`/payment/settle/${selectedCard.id}`);
+    setPaymentSuccess(null);
   };
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
 
   return (
     <div className="mb-2 mt-6 bg-transparent">

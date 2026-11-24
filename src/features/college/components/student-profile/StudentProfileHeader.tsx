@@ -75,7 +75,7 @@ export const StudentProfileHeader: React.FC<StudentProfileHeaderProps> = ({ stud
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isZoomModalOpen]);
 
-  const rawStatus = student.status || "Enrolled";
+  const rawStatus = student.status || "—";
   const normalizedStatus = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase();
   const statusStyle = STUDENT_STATUS_CONFIG[normalizedStatus] || STUDENT_STATUS_CONFIG.Enrolled;
 
@@ -89,7 +89,7 @@ export const StudentProfileHeader: React.FC<StudentProfileHeaderProps> = ({ stud
 
   const handleCopyEmail = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const mail = student.email || "misriyasalim6@gmail.com";
+    const mail = student.email || "—";
     navigator.clipboard.writeText(mail);
     setCopiedEmail(true);
     toast.success("Email copied to clipboard");
@@ -98,7 +98,7 @@ export const StudentProfileHeader: React.FC<StudentProfileHeaderProps> = ({ stud
 
   const handleCopyPhone = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const phone = student.singaporePhone || student.phone || "9562941863";
+    const phone = student.singaporePhone || student.phone || "—";
     navigator.clipboard.writeText(phone);
     setCopiedPhone(true);
     toast.success("Phone number copied to clipboard");
@@ -200,10 +200,10 @@ export const StudentProfileHeader: React.FC<StudentProfileHeaderProps> = ({ stud
                   <div className="group inline-flex items-center gap-1.5 rounded-lg border border-brand-border/80 bg-white px-2 py-0.5 text-text-secondary hover:border-burgundy-primary/30">
                     <Mail className="h-3 w-3 text-burgundy-primary" />
                     <a
-                      href={`mailto:${student.email || "misriyasalim6@gmail.com"}`}
+                      href={`mailto:${student.email || "—"}`}
                       className="font-mono text-[11px] text-text-secondary hover:text-burgundy-primary hover:underline"
                     >
-                      {student.email || "misriyasalim6@gmail.com"}
+                      {student.email || "—"}
                     </a>
                     <button
                       type="button"
@@ -219,10 +219,10 @@ export const StudentProfileHeader: React.FC<StudentProfileHeaderProps> = ({ stud
                   <div className="group inline-flex items-center gap-1.5 rounded-lg border border-brand-border/80 bg-white px-2 py-0.5 text-text-secondary hover:border-burgundy-primary/30">
                     <Phone className="h-3 w-3 text-emerald-600" />
                     <a
-                      href={`tel:${student.singaporePhone || student.phone || "9562941863"}`}
+                      href={`tel:${student.singaporePhone || student.phone || "—"}`}
                       className="font-mono text-[11px] text-text-secondary hover:text-burgundy-primary"
                     >
-                      {student.singaporePhone || student.phone || "9562941863"}
+                      {student.singaporePhone || student.phone || "—"}
                     </a>
                     <button
                       type="button"
@@ -304,13 +304,13 @@ export const StudentProfileHeader: React.FC<StudentProfileHeaderProps> = ({ stud
                 </div>
               </div>
               <div className="mt-1 flex items-baseline gap-2">
-                <span className="font-mono text-xl font-bold tracking-tight text-emerald-950 sm:text-2xl">{student.attendanceCount || "92%"}</span>
-                <span className="text-[11px] font-medium text-emerald-700">Present (46/50 days)</span>
+                <span className="font-mono text-xl font-bold tracking-tight text-emerald-950 sm:text-2xl">{student.attendanceCount || "—"}</span>
+                <span className="text-[11px] font-medium text-emerald-700">Recorded attendance</span>
               </div>
               <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-emerald-100">
                 <div
                   className="h-full rounded-full bg-emerald-500 transition-all duration-500"
-                  style={{ width: "92%" }}
+                  style={{ width: `${Math.min(100, parseFloat(String(student.attendanceCount || 0)) || 0)}%` }}
                 />
               </div>
             </div>
@@ -324,13 +324,13 @@ export const StudentProfileHeader: React.FC<StudentProfileHeaderProps> = ({ stud
                 </div>
               </div>
               <div className="mt-1 flex items-baseline gap-2">
-                <span className="font-mono text-xl font-bold tracking-tight text-amber-950 sm:text-2xl">{student.leaveCount || "3 Days"}</span>
+                <span className="font-mono text-xl font-bold tracking-tight text-amber-950 sm:text-2xl">{student.leaveCount || "—"}</span>
                 <span className="text-[11px] font-medium text-amber-700">2 Approved · 1 Pending</span>
               </div>
               <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-amber-100">
                 <div
                   className="h-full rounded-full bg-amber-500 transition-all duration-500"
-                  style={{ width: "60%" }}
+                  style={{ width: "0%" }}
                 />
               </div>
             </div>
@@ -345,14 +345,14 @@ export const StudentProfileHeader: React.FC<StudentProfileHeaderProps> = ({ stud
               </div>
               <div className="mt-1 flex items-baseline gap-2">
                 <span className="font-mono text-xl font-bold tracking-tight text-palette-midnight sm:text-2xl">
-                  {student.performanceCount || "88.5%"}
+                  {student.performanceCount || "—"}
                 </span>
-                <span className="text-[11px] font-medium text-brand-red">Grade A · GPA 3.84</span>
+                <span className="text-[11px] font-medium text-brand-red">Published grade</span>
               </div>
               <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-brand-light-red/50">
                 <div
                   className="h-full rounded-full bg-burgundy-primary transition-all duration-500"
-                  style={{ width: "88.5%" }}
+                  style={{ width: "0%" }}
                 />
               </div>
             </div>

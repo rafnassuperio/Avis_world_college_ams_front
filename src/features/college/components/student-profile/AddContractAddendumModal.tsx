@@ -1,68 +1,33 @@
+import { useApiCollection } from "@/hooks/useApiCollection";
+import { intakes } from "@/services/ams";
 import React, { useState } from "react";
 import { Plus, CalendarRange } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
-import { FilterSelect, FilterSelectOption } from "@/components/ui/FilterSelect";
+import { FilterSelect } from "@/components/ui/FilterSelect";
 
 export interface AddContractAddendumModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (intakePeriod: string) => void;
+  onAdd: (intakePeriod: string) => void | boolean | Promise<void | boolean>;
   studentName: string;
   defaultIntake?: string;
 }
-
-const INTAKE_OPTIONS: FilterSelectOption[] = [
-  {
-    label: "Spring 2026 Cohort (Jan - Jun 2026)",
-    value: "Spring 2026",
-    badgeDot: "bg-emerald-500",
-    subLabel: "Commences 15 Jan 2026",
-  },
-  {
-    label: "Summer 2026 Intensive (May - Aug 2026)",
-    value: "Summer 2026",
-    badgeDot: "bg-amber-500",
-    subLabel: "Commences 11 May 2026",
-  },
-  {
-    label: "Fall 2026 Cohort (Sep 2026 - Jan 2027)",
-    value: "Fall 2026",
-    badgeDot: "bg-burgundy-primary",
-    subLabel: "Commences 08 Sep 2026",
-  },
-  {
-    label: "Winter 2025 Cohort (Oct 2025 - Feb 2026)",
-    value: "Winter 2025",
-    badgeDot: "bg-brand-red",
-    subLabel: "Ongoing Batch",
-  },
-  {
-    label: "Spring 2025 Cohort",
-    value: "Spring 2025",
-    badgeDot: "bg-palette-dark-wine",
-    subLabel: "Archived Cohort",
-  },
-  {
-    label: "Fall 2025 Cohort",
-    value: "Fall 2025",
-    badgeDot: "bg-palette-dark-wine",
-    subLabel: "Archived Cohort",
-  },
-];
 
 export const AddContractAddendumModal: React.FC<AddContractAddendumModalProps> = ({
   isOpen,
   onClose,
   onAdd,
   studentName,
-  defaultIntake = "Fall 2026",
+  defaultIntake = "",
 }) => {
+  const { data: intakeList } = useApiCollection(intakes);
+  const INTAKE_OPTIONS = intakeList.map(i => ({ label: i.name, value: i.id }));
   const [intakePeriod, setIntakePeriod] = useState(defaultIntake);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onAdd(intakePeriod);
+    if (await onAdd(intakePeriod) === false) return;
     onClose();
   };
 

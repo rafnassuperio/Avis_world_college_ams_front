@@ -12,6 +12,7 @@ export const Header: React.FC = () => {
   const toggleMobileSidebar = useAppStore((state) => state.toggleMobileSidebar);
   const sidebarCollapsed = useAppStore((state) => state.sidebarCollapsed);
   const setIsSearchOpen = useAppStore((state) => state.setIsSearchOpen);
+  const isSearchOpen = useAppStore(state => state.isSearchOpen);
   const unreadCount = useAppStore((state) => state.notifications.filter((n) => !n.isRead).length);
   const adminProfile = useAppStore((state) => state.adminProfile);
 
@@ -19,6 +20,8 @@ export const Header: React.FC = () => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMac, setIsMac] = useState(false);
+
+  useEffect(() => { if (isSearchOpen) { setIsNotifOpen(false); setIsProfileMenuOpen(false); } }, [isSearchOpen]);
 
   // Platform detection for keyboard shortcut display
   useEffect(() => {
@@ -127,7 +130,7 @@ export const Header: React.FC = () => {
             }
           }}
           aria-label="Global Search - Press Ctrl+K or Cmd+K to open"
-          title={`Search students, courses, staff, and system pages (${isMac ? "⌘K" : "Ctrl+K"})`}
+          title={`Search students, courses, staff, partners, and system pages (${isMac ? "⌘K" : "Ctrl+K"})`}
           className="group relative flex h-10 w-full max-w-md cursor-pointer items-center rounded-full border border-brand-border/80 bg-white/95 px-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.02)] transition-all duration-300 hover:border-brand-accent/40 hover:bg-white hover:shadow-[0_4px_16px_rgba(166,76,97,0.1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent/40"
         >
           <motion.div
@@ -138,7 +141,7 @@ export const Header: React.FC = () => {
             <Search className="h-4 w-4 flex-shrink-0 text-text-secondary transition-colors duration-200 group-hover:text-brand-red" />
           </motion.div>
           <span className="ml-2.5 flex-1 select-none truncate text-xs text-text-secondary transition-colors duration-200 group-hover:text-text-primary">
-            Search students, courses, staff, pages...
+            Search students, courses, staff, partners, pages...
           </span>
           <motion.kbd
             whileHover={{ scale: 1.08 }}

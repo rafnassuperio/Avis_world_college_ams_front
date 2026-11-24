@@ -6,12 +6,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ROUTES } from "@/app/routes";
 import { safeStorage } from "@/lib/security";
 import { cn } from "@/lib/utils";
-import { initialStudentsData } from "@/features/college/data/collegeTabData";
-import { initialCoursesData } from "@/features/college/data/collegeTabData";
-import { CollegeStudent, CollegeCourse } from "@/features/college/types";
-import { getAdminsRoster } from "@/features/admins/data/mockAdminsData";
-import { getAgentsList } from "@/features/agents/data/mockAgentsData";
-import { getRepresentativesList } from "@/features/representatives/data/mockRepresentativesData";
+import {getHeaderSearch} from "@/services/header";
+import {useDebouncedValue} from "@/hooks/useDebouncedValue";
+import {AsyncStateView} from "@/components/common/AsyncStateView";
+import { useApiQuery } from "@/hooks/useApiQuery";
+
+
 
 export type SearchCategory = "All" | "Students" | "Courses" | "Staff" | "Partners" | "Pages";
 
@@ -38,7 +38,7 @@ export interface RecentSearchItem {
   timestamp: number;
 }
 
-const RECENT_SEARCHES_KEY = "ams_recent_searches_v2";
+const RECENT_SEARCHES_KEY = "ams_recent_searches_api_v1";
 
 /**
  * Text Highlighting Helper
@@ -79,6 +79,9 @@ export const SearchModal: React.FC = () => {
   const isSearchOpen = useAppStore((state) => state.isSearchOpen);
   const setIsSearchOpen = useAppStore((state) => state.setIsSearchOpen);
   const [query, setQuery] = useState("");
+  const settledQuery = useDebouncedValue(query.trim());
+  const {data: searchData, loading, error, reload} = useApiQuery(signal => isSearchOpen ? getHeaderSearch(settledQuery, signal) : Promise.resolve(null), [isSearchOpen, settledQuery]);
+  const isSearching = loading || query.trim() !== settledQuery;
   const [selectedCategory, setSelectedCategory] = useState<SearchCategory>("All");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isMac, setIsMac] = useState(false);
@@ -142,34 +145,15 @@ export const SearchModal: React.FC = () => {
 
   // Load and manage recent searches
   const [recentSearches, setRecentSearches] = useState<RecentSearchItem[]>(() => {
-    return safeStorage.getItem<RecentSearchItem[]>(RECENT_SEARCHES_KEY, [
-      {
-        id: "recent-std-1",
-        title: "Aarav Patel",
-        subtitle: "BSc Data Science & AI • Roll #AWC-2026-0042",
-        category: "Students",
-        path: "/college/students/AWC-2026-0042",
-        timestamp: Date.now() - 1000 * 60 * 15,
-      },
-      {
-        id: "recent-crs-1",
-        title: "BSc Data Science & AI",
-        subtitle: "BSc-DS • 4 Years • School of Computing & AI",
-        category: "Courses",
-        path: "/college/courses/BSc-DS",
-        timestamp: Date.now() - 1000 * 60 * 60 * 2,
-      },
-      {
-        id: "recent-page-payment",
-        title: "Payment Processing & Cashier Hub",
-        subtitle: "Fee collections, pending tuition dues, invoices",
-        category: "Pages",
-        path: "/payment",
-        timestamp: Date.now() - 1000 * 60 * 60 * 5,
-      },
-    ]);
+    try { const rows = JSON.parse(sessionStorage.getItem(RECENT_SEARCHES_KEY) || "[]"); return Array.isArray(rows) ? rows.filter(row => row && typeof row.id === "string" && typeof row.title === "string" && typeof row.path === "string").slice(0, 8) as RecentSearchItem[] : []; } catch { return []; }
   });
 
+  useEffect(() => {
+    safeStorage.removeItem(RECENT_SEARCHES_KEY);
+    const clear = () => { setRecentSearches([]); try { sessionStorage.removeItem(RECENT_SEARCHES_KEY); } catch { /* Storage unavailable. */ } };
+    window.addEventListener("ams-session-ended", clear);
+    return () => window.removeEventListener("ams-session-ended", clear);
+  }, []);
   const saveToRecent = useCallback(
     (item: SearchItem) => {
       const newItem: RecentSearchItem = {
@@ -183,7 +167,7 @@ export const SearchModal: React.FC = () => {
 
       const updated = [newItem, ...recentSearches.filter((r) => r.id !== item.id && r.path !== item.path)].slice(0, 8);
       setRecentSearches(updated);
-      safeStorage.setItem(RECENT_SEARCHES_KEY, updated);
+      try { sessionStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated)); } catch { /* Storage unavailable. */ }
     },
     [recentSearches],
   );
@@ -192,91 +176,16 @@ export const SearchModal: React.FC = () => {
     e.stopPropagation();
     const updated = recentSearches.filter((r) => r.id !== id);
     setRecentSearches(updated);
-    safeStorage.setItem(RECENT_SEARCHES_KEY, updated);
+    try { sessionStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated)); } catch { /* Storage unavailable. */ }
   };
 
   const clearAllRecent = () => {
     setRecentSearches([]);
-    safeStorage.setItem(RECENT_SEARCHES_KEY, []);
+    try { sessionStorage.removeItem(RECENT_SEARCHES_KEY); } catch { /* Storage unavailable. */ }
   };
 
   // Compile Comprehensive Search Index across all system data
   const allSearchItems = useMemo<SearchItem[]>(() => {
-    // 1. Students
-    const rawStudents = safeStorage.getItem<CollegeStudent[]>("ams_college_students_list", initialStudentsData) || initialStudentsData;
-    const studentItems: SearchItem[] = rawStudents.map((s) => ({
-      id: `std-${s.studentId || s.id}`,
-      title: s.name,
-      subtitle: `${s.course || "Academic Program"} • Roll #${s.studentId || s.id}`,
-      category: "Students",
-      path: ROUTES.COLLEGE.getStudentProfile(s.studentId || s.id),
-      meta: `${s.intake || ""} • ${s.studentType || "Student"} • ${s.nationality || ""}`,
-      status: s.status || "Enrolled",
-      avatar: s.avatar,
-      code: s.studentId,
-      keywords: [s.email, s.phone, s.courseCode, s.passportOrNric, s.nationality, s.location].filter(Boolean) as string[],
-    }));
-
-    // 2. Courses
-    const rawCourses = safeStorage.getItem<CollegeCourse[]>("ams_college_courses_list", initialCoursesData) || initialCoursesData;
-    const courseItems: SearchItem[] = rawCourses.map((c) => ({
-      id: `crs-${c.id || c.code}`,
-      title: c.title,
-      subtitle: `${c.code} • ${c.duration} • ${c.category}`,
-      category: "Courses",
-      path: ROUTES.COLLEGE.getCourseDetails(c.id || c.code),
-      meta: `${c.seats} Seats • ${c.fee || ""} • ${c.level || ""}`,
-      status: c.status || "Active",
-      code: c.code,
-      keywords: [c.code, c.category, c.department, c.level].filter(Boolean) as string[],
-    }));
-
-    // 3. Staff & Administrators
-    const rawAdmins = getAdminsRoster() || [];
-    const staffItems: SearchItem[] = rawAdmins.map((adm) => ({
-      id: `adm-${adm.id}`,
-      title: adm.name,
-      subtitle: `${adm.role} • ${adm.department}`,
-      category: "Staff",
-      path: adm.role === "Super Admin" ? ROUTES.PROFILE : ROUTES.getAdminProfile(adm.id),
-      meta: `${adm.employeeId} • ${adm.location || adm.country}`,
-      status: adm.status || "Active",
-      avatar: adm.avatarUrl,
-      code: adm.employeeId,
-      keywords: [adm.email, adm.phone, adm.department, adm.role, adm.accessLevel].filter(Boolean) as string[],
-    }));
-
-    // 4. Partners (Agents & Representatives)
-    const rawAgents = getAgentsList() || [];
-    const rawReps = getRepresentativesList() || [];
-
-    const partnerItems: SearchItem[] = [
-      ...rawAgents.map((ag) => ({
-        id: `agent-${ag.id}`,
-        title: ag.name,
-        subtitle: `Agent Partner • ${ag.country} • ${ag.representative || ""}`,
-        category: "Partners" as const,
-        path: ROUTES.getPartnerProfile("agent", ag.id),
-        meta: `Code: ${ag.agentCode} • ${ag.type || "Partner"}`,
-        status: ag.status || "Active",
-        avatar: ag.avatarUrl,
-        code: ag.agentCode,
-        keywords: [ag.email, ag.phone, ag.agencyName, ag.country, ag.representative].filter(Boolean) as string[],
-      })),
-      ...rawReps.map((rp) => ({
-        id: `rep-${rp.id}`,
-        title: rp.name,
-        subtitle: `Representative • ${rp.region || rp.country} • ${rp.organization || ""}`,
-        category: "Partners" as const,
-        path: ROUTES.getPartnerProfile("representative", rp.id),
-        meta: `Code: ${rp.repCode} • Agents: ${rp.agentCount || 0}`,
-        status: rp.status || "Active",
-        avatar: rp.avatarUrl,
-        code: rp.repCode,
-        keywords: [rp.email, rp.phone, rp.organization, rp.country, rp.region].filter(Boolean) as string[],
-      })),
-    ];
-
     // 5. System Pages & Navigation
     const pageItems: SearchItem[] = [
       {
@@ -302,7 +211,7 @@ export const SearchModal: React.FC = () => {
         title: "Students Roster & Directory",
         subtitle: "Manage registered student profiles, enrollments and academic standing",
         category: "Pages",
-        path: ROUTES.COLLEGE.ROOT,
+        path: ROUTES.COLLEGE.ROOT + "?tab=students",
         meta: "College / Students",
         keywords: ["students", "roster", "directory", "enrollments", "admissions", "profiles"],
         actionType: "tab-students",
@@ -310,9 +219,9 @@ export const SearchModal: React.FC = () => {
       {
         id: "page-courses-catalog",
         title: "Courses & Degree Programs Catalog",
-        subtitle: "Accredited degree programs, diplomas, and module specifications",
+        subtitle: "Configured courses, fee schemes, and admission requirements",
         category: "Pages",
-        path: ROUTES.COLLEGE.ROOT,
+        path: ROUTES.COLLEGE.ROOT + "?tab=courses",
         meta: "College / Courses",
         keywords: ["courses", "degrees", "diplomas", "programs", "modules", "syllabi"],
         actionType: "tab-courses",
@@ -320,9 +229,9 @@ export const SearchModal: React.FC = () => {
       {
         id: "page-bulk-upload",
         title: "Bulk CSV Data Upload",
-        subtitle: "Mass batch import for students, curriculum data, and intake cohorts",
+        subtitle: "Import student records from supported CSV or XLSX files",
         category: "Pages",
-        path: ROUTES.COLLEGE.ROOT,
+        path: ROUTES.COLLEGE.ROOT + "?tab=bulk-upload",
         meta: "College / Import",
         keywords: ["bulk upload", "import", "csv", "excel", "students import", "batch"],
         actionType: "tab-bulk-upload",
@@ -411,7 +320,7 @@ export const SearchModal: React.FC = () => {
       {
         id: "page-admin-profile",
         title: "Super Admin Profile & Security",
-        subtitle: "Administrative account credentials, 2FA security, and system preferences",
+        subtitle: "Administrative account details and profile preferences",
         category: "Pages",
         path: ROUTES.PROFILE,
         meta: "Account / Settings",
@@ -419,8 +328,8 @@ export const SearchModal: React.FC = () => {
       },
     ];
 
-    return [...studentItems, ...courseItems, ...staffItems, ...partnerItems, ...pageItems];
-  }, []);
+    return [...(searchData?.items || []), ...pageItems];
+  }, [searchData]);
 
   // Scoring function for ranking search relevance
   const scoreItem = useCallback((item: SearchItem, searchQ: string): number => {
@@ -480,11 +389,11 @@ export const SearchModal: React.FC = () => {
       }))
       .filter(({ item, score }) => {
         const matchesCategory = selectedCategory === "All" || item.category === selectedCategory;
-        return matchesCategory && score > 0;
+        return matchesCategory && (item.category !== "Pages" || score > 0);
       });
 
     scored.sort((a, b) => b.score - a.score);
-    return scored.map(({ item }) => item);
+    return scored.map(({ item }) => item).slice(0, 15);
   }, [allSearchItems, query, selectedCategory, scoreItem]);
 
   // Compute live count badges for each category
@@ -500,21 +409,17 @@ export const SearchModal: React.FC = () => {
 
     const trimmed = query.trim();
 
-    allSearchItems.forEach((item) => {
-      const isMatch = !trimmed || scoreItem(item, trimmed) > 0;
-      if (isMatch) {
-        counts.All += 1;
-        counts[item.category] += 1;
-      }
-    });
+    for (const item of allSearchItems) if (item.category === "Pages" && (!trimmed || scoreItem(item, trimmed) > 0)) counts.Pages++;
+    for (const category of ["Students", "Courses", "Staff", "Partners"] as const) counts[category] = searchData?.counts[category] || 0;
+    counts.All = counts.Students + counts.Courses + counts.Staff + counts.Partners + counts.Pages;
 
     return counts;
-  }, [allSearchItems, query, scoreItem]);
+  }, [allSearchItems, query, scoreItem, searchData]);
 
   // Reset selected index when query or category changes
   useEffect(() => {
     setSelectedIndex(0);
-  }, [query, selectedCategory]);
+  }, [query, selectedCategory, searchData]);
 
   // Auto-scroll selected item into view
   useEffect(() => {
@@ -531,20 +436,12 @@ export const SearchModal: React.FC = () => {
     saveToRecent(item);
     setIsSearchOpen(false);
 
-    // If item requests a specific tab on college page
-    if (item.actionType === "tab-students") {
-      safeStorage.setItem("studentsTableActiveTab", "students");
-    } else if (item.actionType === "tab-courses") {
-      safeStorage.setItem("studentsTableActiveTab", "courses");
-    } else if (item.actionType === "tab-bulk-upload") {
-      safeStorage.setItem("studentsTableActiveTab", "bulk-upload");
-    }
-
     navigate(item.path);
   };
 
   // Keyboard navigation within the modal
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if ((isSearching || error) && ["ArrowDown", "ArrowUp", "Enter"].includes(e.key)) { e.preventDefault(); return; }
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setSelectedIndex((prev) => (filteredResults.length === 0 ? 0 : (prev + 1) % filteredResults.length));
@@ -713,7 +610,7 @@ export const SearchModal: React.FC = () => {
                           : "bg-brand-bg text-text-secondary group-hover:bg-brand-light-red/40 group-hover:text-brand-red",
                       )}
                     >
-                      {count}
+                      {isSearching || error ? "—" : count}
                     </span>
                   </button>
                 );
@@ -786,19 +683,10 @@ export const SearchModal: React.FC = () => {
                   <div>
                     <div className="mb-2 flex items-center gap-1.5 px-2 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
                       <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-                      <span>Popular Search Suggestions</span>
+                      <span>Quick Search Suggestions</span>
                     </div>
                     <div className="flex flex-wrap gap-1.5 px-2">
-                      {[
-                        "BSc Data Science",
-                        "Aarav Patel",
-                        "Dr. Sarah Jenkins",
-                        "Settle Payment",
-                        "Bulk Upload",
-                        "EduGlobal",
-                        "Tuition Fee",
-                        "AWC-ADM",
-                      ].map((tag) => (
+                      {allSearchItems.filter(item => item.category === "Pages").slice(0, 8).map(item => item.title).map((tag) => (
                         <button
                           key={tag}
                           type="button"
@@ -814,7 +702,7 @@ export const SearchModal: React.FC = () => {
               )}
 
               {/* Active Results List */}
-              {filteredResults.length === 0 ? (
+              {isSearching || error ? <AsyncStateView isLoading={isSearching} error={error} onRetry={() => void reload()}>{null}</AsyncStateView> : filteredResults.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-light-red/50 text-brand-red">
                     <Search className="h-6 w-6 opacity-75" />
@@ -949,7 +837,7 @@ export const SearchModal: React.FC = () => {
 
               <div className="flex items-center gap-2 text-text-muted">
                 <span>
-                  {filteredResults.length} {filteredResults.length === 1 ? "match" : "matches"}
+                  {isSearching ? "Searching…" : error ? "Search unavailable" : `Showing ${filteredResults.length} of ${categoryCounts[selectedCategory]} matches`}
                 </span>
                 <span>•</span>
                 <span>{isMac ? "⌘K" : "Ctrl+K"} to toggle</span>

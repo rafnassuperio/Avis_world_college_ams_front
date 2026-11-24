@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   Building2,
@@ -31,7 +31,9 @@ import { sanitizeUrl } from "@/lib/security";
 import { cn } from "@/lib/utils";
 
 import { InstituteItem, InstituteCategory, InstituteSortOption } from "./types";
-import { getInstitutesList, saveInstitutesList } from "./data/mockInstitutesData";
+import { institutes } from "@/services/ams";
+import { useApiCollection } from "@/hooks/useApiCollection";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { AddInstituteModal } from "./components/AddInstituteModal";
 import { EditInstituteModal } from "./components/EditInstituteModal";
 import { InstituteDetailsModal } from "./components/InstituteDetailsModal";
@@ -43,7 +45,7 @@ export const InstitutePage: React.FC = () => {
   const sectionVariants = shouldReduceMotion ? { hidden: { opacity: 1 }, visible: { opacity: 1 } } : dashboardSectionVariants;
 
   // Master institutes list state with persistence
-  const [institutesList, setInstitutesList] = useState<InstituteItem[]>(() => getInstitutesList());
+  const { data: institutesList, saveList: updateInstitutesList, loading, error, reload } = useApiCollection(institutes);
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -63,23 +65,20 @@ export const InstitutePage: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   // State persistence handler
-  const updateInstitutesList = useCallback((updated: InstituteItem[]) => {
-    setInstitutesList(updated);
-    saveInstitutesList(updated);
-  }, []);
+
 
   // Handlers for Add, Edit, Delete
-  const handleAddInstitute = (newInstitute: InstituteItem) => {
+  const handleAddInstitute = async (newInstitute: InstituteItem) => {
     const updated = [newInstitute, ...institutesList];
-    updateInstitutesList(updated);
+    if (!await updateInstitutesList(updated)) return false;
     toast.success("Institute Added", {
       description: `${newInstitute.name} has been successfully added to the directory.`,
     });
   };
 
-  const handleSaveInstitute = (updatedInstitute: InstituteItem) => {
+  const handleSaveInstitute = async (updatedInstitute: InstituteItem) => {
     const updated = institutesList.map((inst) => (inst.id === updatedInstitute.id ? updatedInstitute : inst));
-    updateInstitutesList(updated);
+    if (!await updateInstitutesList(updated)) return false;
     if (selectedInstituteForView?.id === updatedInstitute.id) {
       setSelectedInstituteForView(updatedInstitute);
     }
@@ -88,11 +87,11 @@ export const InstitutePage: React.FC = () => {
     });
   };
 
-  const handleDeleteInstitute = () => {
+  const handleDeleteInstitute = async () => {
     if (!selectedInstituteForDelete) return;
     const instToDelete = selectedInstituteForDelete;
     const updated = institutesList.filter((inst) => inst.id !== instToDelete.id);
-    updateInstitutesList(updated);
+    if (!await updateInstitutesList(updated)) return false;
 
     if (selectedInstituteForView?.id === instToDelete.id) {
       setSelectedInstituteForView(null);
@@ -438,6 +437,8 @@ export const InstitutePage: React.FC = () => {
     ],
     [currentPage, pageSize],
   );
+
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
 
   return (
     <motion.div

@@ -47,7 +47,7 @@ export const ProfileDetailsTab: React.FC<ProfileDetailsTabProps> = ({ user, onEd
                   <Building className="h-3.5 w-3.5 text-brand-red" />
                   <span>Name / Institution</span>
                 </span>
-                <p className="mt-1 truncate text-sm font-bold text-text-primary">{user.name || "Avis World College"}</p>
+                <p className="mt-1 truncate text-sm font-bold text-text-primary">{user.name || "—"}</p>
               </div>
 
               {/* Email Address */}
@@ -56,7 +56,7 @@ export const ProfileDetailsTab: React.FC<ProfileDetailsTabProps> = ({ user, onEd
                   <Mail className="h-3.5 w-3.5 text-brand-red" />
                   <span>Email Address</span>
                 </span>
-                <p className="mt-1 truncate text-sm font-bold text-text-primary">{user.email || "acetek1@example.com"}</p>
+                <p className="mt-1 truncate text-sm font-bold text-text-primary">{user.email || "—"}</p>
               </div>
 
               {/* Assigned Role */}
@@ -67,7 +67,7 @@ export const ProfileDetailsTab: React.FC<ProfileDetailsTabProps> = ({ user, onEd
                 </span>
                 <div className="mt-1 flex items-center gap-1.5">
                   <span className="rounded-md bg-burgundy-primary/10 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-burgundy-primary">
-                    {user.role || "super-admin"}
+                    {user.role || "—"}
                   </span>
                   <span className="text-[10px] text-text-muted">(Level 1 Privileges)</span>
                 </div>
@@ -79,7 +79,7 @@ export const ProfileDetailsTab: React.FC<ProfileDetailsTabProps> = ({ user, onEd
                   <Award className="h-3.5 w-3.5 text-brand-red" />
                   <span>Institution College</span>
                 </span>
-                <p className="mt-1 truncate text-sm font-bold text-text-primary">{user.college || "Avis World College"}</p>
+                <p className="mt-1 truncate text-sm font-bold text-text-primary">{user.college || "—"}</p>
               </div>
 
               {/* Department */}
@@ -88,7 +88,7 @@ export const ProfileDetailsTab: React.FC<ProfileDetailsTabProps> = ({ user, onEd
                   <Building className="h-3.5 w-3.5 text-brand-red" />
                   <span>Department</span>
                 </span>
-                <p className="mt-1 truncate text-sm font-bold text-text-primary">{user.department || "Central Administration"}</p>
+                <p className="mt-1 truncate text-sm font-bold text-text-primary">{user.department || "—"}</p>
               </div>
 
               {/* Version & Joined */}
@@ -99,7 +99,7 @@ export const ProfileDetailsTab: React.FC<ProfileDetailsTabProps> = ({ user, onEd
                 </span>
                 <div className="mt-1 flex items-center gap-2">
                   <span className="rounded-md border border-emerald-200/80 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
-                    {user.amsVersion || "v2.4.0"}
+                    {user.amsVersion || "—"}
                   </span>
                   <span className="text-[11px] text-text-muted">Updated Nov 2026</span>
                 </div>
@@ -108,7 +108,7 @@ export const ProfileDetailsTab: React.FC<ProfileDetailsTabProps> = ({ user, onEd
           </div>
 
           <div className="mt-4 flex items-center justify-between border-t border-brand-border/60 pt-3 text-xs text-text-muted">
-            <span>Account Registered: {user.joinedDate || "15 August 2023"}</span>
+            <span>Account Registered: {user.joinedDate || "—"}</span>
             <span className="inline-flex items-center gap-1 font-semibold text-emerald-600">
               <CheckCircle2 className="h-3.5 w-3.5" />
               <span>Full Operational Status</span>
@@ -140,7 +140,7 @@ export const ProfileDetailsTab: React.FC<ProfileDetailsTabProps> = ({ user, onEd
                   </div>
                   <div>
                     <p className="text-[11px] text-text-muted">City</p>
-                    <p className="text-sm font-bold text-text-primary">{user.city || "Kerala"}</p>
+                    <p className="text-sm font-bold text-text-primary">{user.city || "—"}</p>
                   </div>
                 </div>
                 <span className="rounded-full bg-brand-light-red/60 px-2.5 py-0.5 text-[10px] font-bold text-brand-red">Campus City</span>
@@ -154,7 +154,7 @@ export const ProfileDetailsTab: React.FC<ProfileDetailsTabProps> = ({ user, onEd
                   </div>
                   <div>
                     <p className="text-[11px] text-text-muted">State / Region ID</p>
-                    <p className="truncate text-sm font-bold text-text-primary">{user.state || "acetek@example.com"}</p>
+                    <p className="truncate text-sm font-bold text-text-primary">{user.state || "—"}</p>
                   </div>
                 </div>
                 <span className="rounded-full bg-brand-light-red/60 px-2.5 py-0.5 text-[10px] font-bold text-brand-red">State Identifier</span>
@@ -168,7 +168,7 @@ export const ProfileDetailsTab: React.FC<ProfileDetailsTabProps> = ({ user, onEd
                   </div>
                   <div>
                     <p className="text-[11px] text-text-muted">Country</p>
-                    <p className="text-sm font-bold text-text-primary">{user.country || "India"}</p>
+                    <p className="text-sm font-bold text-text-primary">{user.country || "—"}</p>
                   </div>
                 </div>
                 <span className="rounded-full bg-brand-light-red/60 px-2.5 py-0.5 text-[10px] font-bold text-brand-red">Headquarters</span>
@@ -182,7 +182,7 @@ export const ProfileDetailsTab: React.FC<ProfileDetailsTabProps> = ({ user, onEd
                   </div>
                   <div>
                     <p className="text-[11px] text-text-muted">Contact Phone</p>
-                    <p className="text-sm font-bold text-text-primary">{user.phone || "+91 94471 23456"}</p>
+                    <p className="text-sm font-bold text-text-primary">{user.phone || "—"}</p>
                   </div>
                 </div>
                 <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">

@@ -10,7 +10,7 @@ import { sanitizeUrl } from "@/lib/security";
 export interface AddGoogleDriveLinkModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddLink: (link: { title: string; url: string; category?: string }) => void;
+  onAddLink: (link: { title: string; url: string; category?: string }) => void | boolean | Promise<void | boolean>;
 }
 
 export const DRIVE_CATEGORY_OPTIONS: FilterSelectOption[] = [
@@ -29,7 +29,7 @@ export const AddGoogleDriveLinkModal: React.FC<AddGoogleDriveLinkModalProps> = (
   const [category, setCategory] = useState("Pass / Visa");
   const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
@@ -49,11 +49,11 @@ export const AddGoogleDriveLinkModal: React.FC<AddGoogleDriveLinkModalProps> = (
       return;
     }
 
-    onAddLink({
+    if (await onAddLink({
       title: title.trim(),
       url: sanitized,
       category: category.trim(),
-    });
+    }) === false) return;
 
     toast.success(`Google Drive link "${title.trim()}" added successfully`);
     setTitle("");

@@ -1,16 +1,20 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Eye, FileText, Check, Plus, ShieldCheck } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "@/components/common/ToastMessage";
 import { DeleteModal } from "@/components/ui/DeleteModal";
 import { Button } from "@/components/ui/Button";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/Table";
-import { safeStorage } from "@/lib/security";
+import { apiClient } from "@/services/api/apiClient";
+import { apiMessage, type Row } from "@/services/ams";
+import { useApiQuery } from "@/hooks/useApiQuery";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { CollegeStudent } from "../../types";
 import { StudentDocumentPreviewModal } from "./StudentDocumentPreviewModal";
 import { AddContractAddendumModal } from "./AddContractAddendumModal";
 
 export interface StudentOfficialDocumentItem {
+  intakeId?: string;
   id: string;
   name: string;
   code: string;
@@ -32,9 +36,8 @@ const DEFAULT_DOCUMENTS: StudentOfficialDocumentItem[] = [
     id: "doc-contract",
     name: "Student Contract",
     code: "PEI-CONTRACT",
-    hasCheckmark: true,
-    status: "generated",
-    generatedDate: "Aug 15, 2026",
+    hasCheckmark: false,
+    status: "not_generated",
     hasAddAction: true,
     type: "contract",
   },
@@ -50,9 +53,8 @@ const DEFAULT_DOCUMENTS: StudentOfficialDocumentItem[] = [
     id: "doc-loo",
     name: "Letter Of Offer (LOO) & Acceptance Of Offer",
     code: "LOO",
-    hasCheckmark: true,
-    status: "generated",
-    generatedDate: "Aug 12, 2026",
+    hasCheckmark: false,
+    status: "not_generated",
     type: "loo",
   },
   {
@@ -66,17 +68,13 @@ const DEFAULT_DOCUMENTS: StudentOfficialDocumentItem[] = [
 ];
 
 export const StudentContractsTab: React.FC<StudentContractsTabProps> = ({ student }) => {
-  const storageKey = `ams_student_official_docs_${student.id || student.studentId || "default"}`;
-
-  // Initial load from storage or fallback to defaults matching exact uploaded image
-  const [documents, setDocuments] = useState<StudentOfficialDocumentItem[]>(() => {
-    return safeStorage.getItem<StudentOfficialDocumentItem[]>(storageKey, DEFAULT_DOCUMENTS);
-  });
-
-  // Save to safeStorage whenever documents update
-  useEffect(() => {
-    safeStorage.setItem(storageKey, documents);
-  }, [documents, storageKey]);
+  const documentTypes: Record<string, string> = { contract: "contract", cloo: "conditionalLetterOfOffer", loo: "letterOfOffer", advisory: "advisoryNote" };
+  const { data, loading, error, reload } = useApiQuery(() => apiClient.get<Row>(`/api/admin/generate-contracts/${student.id}`), [student.id]);
+  const documents: StudentOfficialDocumentItem[] = DEFAULT_DOCUMENTS.map(doc => ({ ...doc,
+    hasCheckmark: Boolean(data?.data?.studentDocuments?.[documentTypes[doc.type]]),
+    status: data?.data?.studentDocuments?.[documentTypes[doc.type]] ? "generated" : "not_generated" }));
+  for (const c of data?.data?.newContract || []) documents.push({ id: c._id, name: "Student Contract (" + (c.intakeId?.name || "") + ")", code: "PEI-CONTRACT", hasCheckmark: true,
+    status: "generated", generatedDate: c.timestamp || "", type: "custom", intakeId: c.intakeId?._id || c.intakeId, intakePeriod: c.intakeId?.name || "" });
 
   // Modal States
   const [selectedPreviewDoc, setSelectedPreviewDoc] = useState<StudentOfficialDocumentItem | null>(null);
@@ -84,84 +82,27 @@ export const StudentContractsTab: React.FC<StudentContractsTabProps> = ({ studen
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isGeneratingId, setIsGeneratingId] = useState<string | null>(null);
 
-  // Generate Document Action
-  const handleGenerate = (doc: StudentOfficialDocumentItem) => {
+  const handleGenerate = async (doc: StudentOfficialDocumentItem) => {
     setIsGeneratingId(doc.id);
-
-    // Simulate generation with immediate feedback
-    setTimeout(() => {
-      const today = new Date().toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      });
-
-      setDocuments((prev) =>
-        prev.map((d) =>
-          d.id === doc.id
-            ? {
-                ...d,
-                status: "generated",
-                hasCheckmark: true,
-                generatedDate: today,
-              }
-            : d,
-        ),
-      );
-
-      setIsGeneratingId(null);
-      toast.success(`${doc.name} generated successfully!`);
-    }, 400);
+    try {
+      await apiClient.post("/api/admin/document-data/generate-document", { studentId: student.id, documentType: documentTypes[doc.type], action: "generate" });
+      await reload(); toast.success(doc.name + " generated.");
+    } catch (error) { toast.error("Unable to generate document", { description: apiMessage(error) }); }
+    finally { setIsGeneratingId(null); }
   };
-
-  // Confirm Delete Action
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!docToDelete) return;
-
-    if (docToDelete.type === "custom") {
-      // If custom added document, remove from list completely
-      setDocuments((prev) => prev.filter((d) => d.id !== docToDelete.id));
-      toast.success(`${docToDelete.name} deleted successfully.`);
-    } else {
-      // If standard document, revert to not generated
-      setDocuments((prev) =>
-        prev.map((d) =>
-          d.id === docToDelete.id
-            ? {
-                ...d,
-                status: "not_generated",
-                hasCheckmark: false,
-                generatedDate: undefined,
-              }
-            : d,
-        ),
-      );
-      toast.success(`${docToDelete.name} reset to ungenerated status.`);
-    }
-
-    setDocToDelete(null);
+    try {
+      if (docToDelete.type === "custom") await apiClient.put(`/api/admin/generate-contracts/${student.id}/${docToDelete.intakeId}`);
+      else await apiClient.post("/api/admin/document-data/generate-document", { studentId: student.id, documentType: documentTypes[docToDelete.type], action: "ungenerate" });
+      await reload(); setDocToDelete(null); toast.success("Document updated.");
+    } catch (error) { toast.error("Unable to update document", { description: apiMessage(error) }); return false; }
   };
-
-  // Add Contract for Intake Period
-  const handleAddDocument = (intakePeriod: string) => {
-    const newDoc: StudentOfficialDocumentItem = {
-      id: `doc-contract-${Date.now()}`,
-      name: `Student Contract (${intakePeriod})`,
-      code: "PEI-CONTRACT",
-      hasCheckmark: true,
-      status: "generated",
-      generatedDate: new Date().toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }),
-      type: "contract",
-      intakePeriod,
-    };
-
-    setDocuments((prev) => [...prev, newDoc]);
-    toast.success(`Student Contract for ${intakePeriod} added successfully.`);
+  const handleAddDocument = async (intakeId: string) => {
+    try { await apiClient.post(`/api/admin/generate-contracts/${student.id}`, { intakeId }); await reload(); toast.success("Student contract added."); }
+    catch (error) { toast.error("Unable to add contract", { description: apiMessage(error) }); return false; }
   };
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
 
   return (
     <div className="space-y-4">

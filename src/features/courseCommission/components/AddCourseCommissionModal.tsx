@@ -4,7 +4,8 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Dropdown, DropdownOption } from "@/components/ui/Dropdown";
 import { CalcType, CommissionTypeItem, CourseCommissionConfig } from "../types";
-import { initialCoursesData } from "@/features/college/data/collegeTabData";
+import { courses } from "@/services/ams";
+import { useApiCollection } from "@/hooks/useApiCollection";
 import { cn } from "@/lib/utils";
 
 const calcTypeOptions: DropdownOption[] = [
@@ -15,11 +16,12 @@ const calcTypeOptions: DropdownOption[] = [
 export interface AddCourseCommissionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (newConfig: CourseCommissionConfig) => void;
+  onAdd: (newConfig: CourseCommissionConfig) => void | boolean | Promise<void | boolean>;
 }
 
 export const AddCourseCommissionModal: React.FC<AddCourseCommissionModalProps> = ({ isOpen, onClose, onAdd }) => {
   const formId = useId();
+  const { data: initialCoursesData } = useApiCollection(courses);
 
   // Course selection state
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
@@ -128,7 +130,7 @@ export const AddCourseCommissionModal: React.FC<AddCourseCommissionModalProps> =
   };
 
   // Form submit
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
 
@@ -160,7 +162,7 @@ export const AddCourseCommissionModal: React.FC<AddCourseCommissionModalProps> =
       lastUpdated: new Date().toISOString().split("T")[0],
     };
 
-    onAdd(newConfig);
+    if (await onAdd(newConfig) === false) return;
     onClose();
   };
 

@@ -1,51 +1,25 @@
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import { Building, UserCheck, Clock, DollarSign, Building2 } from "lucide-react";
-import { mockAgentRepReportList } from "../data/mockPaymentReportData";
+import { useFinanceSummary } from "@/services/reports";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { AgentRepReportRecord } from "../types";
 import { PartnerSidebarList } from "./PartnerSidebarList";
 import { PartnerDetailView } from "./PartnerDetailView";
 import { cn } from "@/lib/utils";
 
 export const AgentRepReportTab: React.FC = () => {
-  // Active partner type sub-tab: "Agent" vs "Representative"
+  const {data, loading, error, reload} = useFinanceSummary();
   const [activePartnerType, setActivePartnerType] = useState<"Agent" | "Representative">("Agent");
-
-  // Executive Top Metrics calculations
-  const metrics = useMemo(() => {
-    return {
-      totalCommissionPool: 28729.766,
-      activeEnrollmentAgents: 7,
-      activeRegionalReps: 5,
-      pendingClearance: -15603.94,
-    };
-  }, []);
-
-  // Filter partners by entity type
-  const agents = useMemo(() => mockAgentRepReportList.filter((p) => p.entityType === "Agent"), []);
-
-  const representatives = useMemo(() => mockAgentRepReportList.filter((p) => p.entityType === "Representative"), []);
-
-  // Active list based on active tab
-  const currentPartners = activePartnerType === "Agent" ? agents : representatives;
-
-  // Selected partner state (distinct per tab for persistent selection)
-  const [selectedAgentId, setSelectedAgentId] = useState<string>(agents[0]?.id || "");
-  const [selectedRepId, setSelectedRepId] = useState<string>(representatives[0]?.id || "");
-
-  const selectedPartner = useMemo(() => {
-    if (activePartnerType === "Agent") {
-      return agents.find((p) => p.id === selectedAgentId) || agents[0];
-    }
-    return representatives.find((p) => p.id === selectedRepId) || representatives[0];
-  }, [activePartnerType, agents, representatives, selectedAgentId, selectedRepId]);
-
+  const metrics = {totalCommissionPool: data?.totalCommissionPool || 0, pendingClearance: data?.pendingClearance || 0,
+    activeEnrollmentAgents: data?.agentCount || 0, activeRegionalReps: data?.repCount || 0};
+  const [selectedAgent, setSelectedAgent] = useState<AgentRepReportRecord | null>(null);
+  const [selectedRep, setSelectedRep] = useState<AgentRepReportRecord | null>(null);
+  const selectedPartner = activePartnerType === "Agent" ? selectedAgent : selectedRep;
   const handleSelectPartner = (partner: AgentRepReportRecord) => {
-    if (partner.entityType === "Agent") {
-      setSelectedAgentId(partner.id);
-    } else {
-      setSelectedRepId(partner.id);
-    }
+    if (partner.entityType === "Agent") setSelectedAgent(partner); else setSelectedRep(partner);
   };
+
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
 
   return (
     <div className="space-y-4">
@@ -159,7 +133,7 @@ export const AgentRepReportTab: React.FC = () => {
                       : "border border-brand-border bg-brand-bg text-text-secondary",
                   )}
                 >
-                  {agents.length} Agencies
+                  {metrics.activeEnrollmentAgents} Agencies
                 </span>
               </div>
               <p className="mt-0.5 text-xs text-text-muted">Contracted recruitment partners & external consultants</p>
@@ -212,7 +186,7 @@ export const AgentRepReportTab: React.FC = () => {
                       : "border border-brand-border bg-brand-bg text-text-secondary",
                   )}
                 >
-                  {representatives.length} Liaisons
+                  {metrics.activeRegionalReps} Liaisons
                 </span>
               </div>
               <p className="mt-0.5 text-xs text-text-muted">Designated institutional regional officers & counselors</p>
@@ -234,7 +208,7 @@ export const AgentRepReportTab: React.FC = () => {
         {/* Left Side: Sidebar showing Partner List */}
         <div className="lg:col-span-4">
           <PartnerSidebarList
-            partners={currentPartners}
+            totalCount={activePartnerType === "Agent" ? metrics.activeEnrollmentAgents : metrics.activeRegionalReps}
             selectedPartnerId={selectedPartner?.id || ""}
             onSelectPartner={handleSelectPartner}
             entityType={activePartnerType}

@@ -11,7 +11,7 @@ const DEV_HEADERS = {
   // In development, allow 'unsafe-inline' and 'unsafe-eval' so Vite's React Fast Refresh preamble,
   // HMR WebSockets, and developer tools/inspectors function seamlessly without CSP violations.
   "Content-Security-Policy":
-    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https: ws: wss: http://localhost:* ws://localhost:*; object-src 'none'; base-uri 'self';",
+    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https: ws: wss: http://localhost:* http://127.0.0.1:* ws://localhost:*; object-src 'none'; base-uri 'self';",
 };
 
 const PREVIEW_HEADERS = {
@@ -21,7 +21,7 @@ const PREVIEW_HEADERS = {
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
   "Content-Security-Policy":
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https: ws: wss:; object-src 'none'; base-uri 'self';",
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https: ws: wss: http://localhost:5000 http://127.0.0.1:5000; object-src 'none'; base-uri 'self';",
 };
 
 // https://vitejs.dev/config/

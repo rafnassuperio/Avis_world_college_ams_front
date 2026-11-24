@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 export interface DeleteModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: () => void | Promise<void>;
+  onConfirm: () => void | boolean | Promise<void | boolean>;
   title?: string;
   description?: string;
   confirmText?: string;

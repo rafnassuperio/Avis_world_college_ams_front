@@ -1,3 +1,5 @@
+import { apiClient } from "@/services/api/apiClient";
+import { apiMessage } from "@/services/ams";
 import React, { useState, useMemo, useEffect } from "react";
 import { StudentDetailsCard } from "./StudentDetailsCard";
 import { OutstandingFeesCard, OutstandingFeeItem } from "./OutstandingFeesCard";
@@ -26,32 +28,10 @@ export const OtherPaymentOptionsTab: React.FC<OtherPaymentOptionsTabProps> = ({ 
   // ----------------------------------------------------
   // Initial Outstanding Fee Items
   // ----------------------------------------------------
-  const [outstandingItems, setOutstandingItems] = useState<OutstandingFeeItem[]>([
-    {
-      id: "FEE-01",
-      name: "Airport Pickup",
-      amount: 218.0,
-      dateAdded: "12 Oct 2026",
-      feeNote: "Standard Airport Pickup Service",
-    },
-    {
-      id: "FEE-02",
-      name: "Kitchen Tool Kit",
-      amount: 54.5,
-      dateAdded: "14 Oct 2026",
-      feeNote: "Culinary practical tool set",
-    },
-    {
-      id: "FEE-03",
-      name: "Admin Fee for Student Pass Renewal",
-      amount: 109.0,
-      dateAdded: "15 Oct 2026",
-      feeNote: "Annual renewal processing",
-    },
-  ]);
+  const [outstandingItems, setOutstandingItems] = useState<OutstandingFeeItem[]>((record.otherPayments || []).filter(f => f.status !== "paid").map(f => ({ id: f._id, name: f.name, amount: f.amount, dateAdded: "", feeNote: "" })));
 
   // Selected fee item IDs to pay now
-  const [selectedItemIds, setSelectedItemIds] = useState<string[]>(["FEE-01", "FEE-02"]);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
 
   // Calculate sum of selected items
   const selectedTotalAmount = useMemo(() => {
@@ -114,28 +94,15 @@ export const OtherPaymentOptionsTab: React.FC<OtherPaymentOptionsTabProps> = ({ 
     setSelectedItemIds([]);
   };
 
-  const handleAddNewFee = (name: string, amount: number, note?: string) => {
-    const newItem: OutstandingFeeItem = {
-      id: `FEE-${Date.now().toString().slice(-4)}`,
-      name,
-      amount,
-      dateAdded: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
-      feeNote: note,
-    };
-    setOutstandingItems((prev) => [newItem, ...prev]);
-    setSelectedItemIds((prev) => [...prev, newItem.id]);
-    toast.success("Fee Added", {
-      description: `${name} (SGD ${fmt(amount)}) added to outstanding fees.`,
-    });
+  const handleAddNewFee = async (name: string, amount: number, _note?: string) => {
+    try {
+      await apiClient.post("/api/admin/add-payment-option", { studentId: record.student.id, paymentId: record.id, OtherPaymentOption: [{ value: name, fee: amount }] });
+      onUpdate?.(); toast.success("Fee added.");
+    } catch (error) { toast.error("Unable to add fee", { description: apiMessage(error) }); return false; }
   };
-
-  const handleRemoveFee = (id: string) => {
-    const target = outstandingItems.find((item) => item.id === id);
-    setOutstandingItems((prev) => prev.filter((item) => item.id !== id));
-    setSelectedItemIds((prev) => prev.filter((itemId) => itemId !== id));
-    toast.info("Fee Removed", {
-      description: target ? `${target.name} removed from outstanding fees.` : "Fee removed.",
-    });
+  const handleRemoveFee = async (id: string) => {
+    try { await apiClient.delete(`/api/admin/payments/${record.id}/other-payments/${id}`); setOutstandingItems(items => items.filter(i => i.id !== id)); setSelectedItemIds(ids => ids.filter(value => value !== id)); onUpdate?.(); }
+    catch (error) { toast.error("Unable to remove fee", { description: apiMessage(error) }); }
   };
 
   // ----------------------------------------------------
@@ -145,14 +112,14 @@ export const OtherPaymentOptionsTab: React.FC<OtherPaymentOptionsTabProps> = ({ 
     setReceiptNo("");
     setPaymentMethod("Cash");
     setPaymentDate(getTodayIso());
-    setSelectedItemIds(["FEE-01", "FEE-02"]);
+    setSelectedItemIds([]);
     setAmountError("");
     toast.info("Payment Form Reset", {
       description: "Payment details have been restored to initial selections.",
     });
   };
 
-  const handleProcessPayment = () => {
+  const handleProcessPayment = async () => {
     const numAmount = parseFloat(totalAmountToPay.replace(/,/g, ""));
     if (isNaN(numAmount) || numAmount <= 0) {
       setAmountError("Please select at least one fee or enter a valid amount greater than SGD 0");
@@ -161,19 +128,22 @@ export const OtherPaymentOptionsTab: React.FC<OtherPaymentOptionsTabProps> = ({ 
       });
       return;
     }
+    if (!selectedItemIds.length || Math.abs(numAmount - selectedTotalAmount) > 0.005) { setAmountError("Pay the full amount of the selected fees. Partial ancillary payments are not supported by this workflow."); return; }
     setAmountError("");
 
     // Identify selected items names for transaction note
     const selectedItems = outstandingItems.filter((i) => selectedItemIds.includes(i.id));
     const itemsSummary = selectedItems.length > 0 ? selectedItems.map((i) => i.name).join(", ") : "Ancillary Fee Settlement";
 
-    const res = settlePaymentRecord(record.id, {
+    const res = await settlePaymentRecord(record.id, {
       amount: numAmount,
       paymentMethod: paymentMethod as PaymentHistoryItem["paymentMethod"],
       receiptNo: receiptNo.trim() || undefined,
       feeCategory: "Other Payment",
+      otherPaymentIds: selectedItemIds,
       itemName: itemsSummary.length > 60 ? `${itemsSummary.slice(0, 57)}...` : itemsSummary,
       note: `Ancillary fees settled (${paymentMethod}) on ${paymentDate}: ${itemsSummary}`,
+      paymentDate,
     });
 
     if (res.success && res.transaction) {

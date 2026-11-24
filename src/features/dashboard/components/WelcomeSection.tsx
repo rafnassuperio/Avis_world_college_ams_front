@@ -1,3 +1,6 @@
+import { useAnalytics } from "@/services/analytics";
+import { useAppStore } from "@/store/useAppStore";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import React from "react";
 import { motion } from "framer-motion";
 import { Users, GraduationCap, Layers, IndianRupee } from "lucide-react";
@@ -21,15 +24,15 @@ interface StatItem {
   title: string;
 }
 
-const stats: StatItem[] = [
+const statTemplates: StatItem[] = [
   {
     id: "students",
     icon: <Users className="h-5 w-5 text-brand-red" />,
     iconBg: "#F1DDE0",
     glowColor: "rgba(166, 76, 97, 0.14)",
     waveColor: "#A64C61",
-    numericValue: 1248,
-    badge: "+5.2%",
+    numericValue: 0,
+    badge: "—",
     title: "Total Students",
   },
   {
@@ -38,8 +41,8 @@ const stats: StatItem[] = [
     iconBg: "rgba(112, 43, 64, 0.10)",
     glowColor: "rgba(112, 43, 64, 0.14)",
     waveColor: "#702B40",
-    numericValue: 86,
-    badge: "+2.1%",
+    numericValue: 0,
+    badge: "—",
     title: "Total Representatives",
   },
   {
@@ -48,8 +51,8 @@ const stats: StatItem[] = [
     iconBg: "rgba(210, 139, 150, 0.22)",
     glowColor: "rgba(210, 139, 150, 0.20)",
     waveColor: "#D28B96",
-    numericValue: 14,
-    badge: "+16.7%",
+    numericValue: 0,
+    badge: "—",
     title: "Total Agents",
   },
   {
@@ -58,8 +61,8 @@ const stats: StatItem[] = [
     iconBg: "rgba(66, 27, 41, 0.08)",
     glowColor: "rgba(66, 27, 41, 0.14)",
     waveColor: "#421B29",
-    numericValue: 78,
-    badge: "+18.2%",
+    numericValue: 0,
+    badge: "—",
     title: "Agent Applications",
   },
 ];
@@ -159,6 +162,9 @@ const StatCard: React.FC<StatCardProps> = ({ item, index }) => {
 };
 
 const WelcomeSectionComponent: React.FC = () => {
+  const { data, loading, error, reload } = useAnalytics();
+  const user = useAppStore(state => state.adminProfile);
+  const stats = statTemplates.map(item => ({ ...item, numericValue: data?.totals[item.id === "totalRepresentatives" ? "representatives" : item.id === "totalAgents" ? "agents" : item.id === "agentApplications" ? "agentApplications" : "students"] || 0 }));
   const [greeting, setGreeting] = React.useState<string>(getGreeting);
 
   React.useEffect(() => {
@@ -171,6 +177,7 @@ const WelcomeSectionComponent: React.FC = () => {
   }, []);
 
   const breadcrumbParts = [{ name: "Dashboard" }];
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
 
   return (
     <div className="relative mb-5 overflow-hidden rounded-[26px] border border-brand-border bg-gradient-to-r from-brand-bg via-brand-bg/85 to-brand-bg shadow-[0_4px_24px_-4px_rgba(66,27,41,0.04)]">
@@ -212,7 +219,7 @@ const WelcomeSectionComponent: React.FC = () => {
         >
           {/* Greeting */}
           <p className="flex items-center gap-1.5 text-[14px] font-semibold text-text-primary sm:text-[17px]">
-            <span>{greeting}, Administrator</span>
+            <span>{greeting}, {user.name || "Administrator"}</span>
             <motion.span
               animate={{ rotate: [0, 14, -8, 14, -4, 10, 0] }}
               transition={{ duration: 2.2, repeat: Infinity, repeatDelay: 3, ease: "easeInOut" }}

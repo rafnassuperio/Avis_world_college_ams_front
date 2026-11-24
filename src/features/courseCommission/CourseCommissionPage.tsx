@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   Plus,
@@ -24,7 +24,9 @@ import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/ui/Pagination";
 import { DeleteModal } from "@/components/ui/DeleteModal";
 import { dashboardContainerVariants, dashboardSectionVariants } from "@/components/animations/transitions";
-import { getCourseCommissionList, saveCourseCommissionList } from "./data/mockCourseCommissionData";
+import { commissions } from "@/services/ams";
+import { useApiCollection } from "@/hooks/useApiCollection";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { CourseCommissionConfig } from "./types";
 import { AddCourseCommissionModal } from "./components/AddCourseCommissionModal";
 import { EditCourseCommissionModal } from "./components/EditCourseCommissionModal";
@@ -37,7 +39,7 @@ export const CourseCommissionPage: React.FC = () => {
   const sectionVariants = shouldReduceMotion ? { hidden: { opacity: 1 }, visible: { opacity: 1 } } : dashboardSectionVariants;
 
   // Master State
-  const [commissionList, setCommissionList] = useState<CourseCommissionConfig[]>(() => getCourseCommissionList());
+  const { data: commissionList, saveList: updateCommissionList, loading, error, reload } = useApiCollection(commissions);
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -56,13 +58,10 @@ export const CourseCommissionPage: React.FC = () => {
   const [selectedForDelete, setSelectedForDelete] = useState<CourseCommissionConfig | null>(null);
 
   // Persistence handler
-  const updateCommissionList = useCallback((updated: CourseCommissionConfig[]) => {
-    setCommissionList(updated);
-    saveCourseCommissionList(updated);
-  }, []);
+
 
   // Add handler
-  const handleAddConfig = (newConfig: CourseCommissionConfig) => {
+  const handleAddConfig = async (newConfig: CourseCommissionConfig) => {
     const existingIndex = commissionList.findIndex((c) => c.code.toUpperCase() === newConfig.code.toUpperCase());
 
     let updated: CourseCommissionConfig[];
@@ -81,27 +80,27 @@ export const CourseCommissionPage: React.FC = () => {
       updated = [newConfig, ...commissionList];
     }
 
-    updateCommissionList(updated);
+    if (!await updateCommissionList(updated)) return false;
     toast.success("Course Commission Config Saved", {
       description: `Commission rules for "${newConfig.courseName}" (${newConfig.code}) have been configured.`,
     });
   };
 
   // Edit handler
-  const handleSaveConfig = (updatedConfig: CourseCommissionConfig) => {
+  const handleSaveConfig = async (updatedConfig: CourseCommissionConfig) => {
     const updated = commissionList.map((item) => (item.id === updatedConfig.id ? updatedConfig : item));
-    updateCommissionList(updated);
+    if (!await updateCommissionList(updated)) return false;
     toast.success("Configuration Updated", {
       description: `Commission rates for ${updatedConfig.code} were successfully updated.`,
     });
   };
 
   // Delete handler
-  const handleDeleteConfig = () => {
+  const handleDeleteConfig = async () => {
     if (!selectedForDelete) return;
     const toDelete = selectedForDelete;
     const updated = commissionList.filter((item) => item.id !== toDelete.id);
-    updateCommissionList(updated);
+    if (!await updateCommissionList(updated)) return false;
 
     if (selectedForEdit?.id === toDelete.id) {
       setSelectedForEdit(null);
@@ -381,6 +380,8 @@ export const CourseCommissionPage: React.FC = () => {
     ],
     [currentPage, pageSize],
   );
+
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
 
   return (
     <motion.div

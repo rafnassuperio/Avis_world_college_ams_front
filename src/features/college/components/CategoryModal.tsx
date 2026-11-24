@@ -9,7 +9,7 @@ import { CollegeCategory } from "../types";
 export interface CategoryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (category: CollegeCategory) => void;
+  onSave: (category: CollegeCategory) => void | boolean | Promise<void | boolean>;
   category?: CollegeCategory | null;
   existingCategories?: CollegeCategory[];
 }
@@ -70,7 +70,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose, o
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const trimmedName = name.trim();
@@ -112,7 +112,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose, o
       code: category?.code || trimmedName.slice(0, 4).toUpperCase(),
     };
 
-    onSave(savedCategory);
+    if (await onSave(savedCategory) === false) return;
     onClose();
   };
 

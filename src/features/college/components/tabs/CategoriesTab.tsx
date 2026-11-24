@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Plus, Search, Edit2, Trash2, Layers, Tag, RotateCcw, X } from "lucide-react";
-import { initialCategoriesData } from "../../data/collegeTabData";
+
 import { CollegeCategory } from "../../types";
 import { DataTable, ColumnDef } from "@/components/ui/Table";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/ui/Pagination";
 import { CategoryModal } from "../CategoryModal";
 import { toast } from "@/components/common/ToastMessage";
-import { safeStorage } from "@/lib/security";
+import { categories } from "@/services/ams";
+import { useApiCollection } from "@/hooks/useApiCollection";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { cn } from "@/lib/utils";
 
 export interface CategoriesTabProps {
@@ -18,35 +20,9 @@ export interface CategoriesTabProps {
   onCategoriesChange?: (categories: CollegeCategory[]) => void;
 }
 
-const STORAGE_KEY = "ams_college_categories_list";
+export const CategoriesTab: React.FC<CategoriesTabProps> = ({ className }) => {
+  const { data: categoryList, saveList: saveCategories, loading, error, reload } = useApiCollection(categories);
 
-export const CategoriesTab: React.FC<CategoriesTabProps> = ({ categories: externalCategories, className, onCategoriesChange }) => {
-  // Categories list state with local persistence
-  const [categoryList, setCategoryList] = useState<CollegeCategory[]>(() => {
-    if (externalCategories && externalCategories.length > 0) return externalCategories;
-    const saved = safeStorage.getItem<CollegeCategory[]>(STORAGE_KEY, initialCategoriesData);
-    if (Array.isArray(saved) && saved.length > 0 && saved.some((c) => Boolean(c.value))) {
-      return saved;
-    }
-    return initialCategoriesData;
-  });
-
-  // Keep in sync if parent passes updated categories
-  useEffect(() => {
-    if (externalCategories && externalCategories.length > 0) {
-      setCategoryList(externalCategories);
-    }
-  }, [externalCategories]);
-
-  // Persist category changes
-  const saveCategories = useCallback(
-    (newList: CollegeCategory[]) => {
-      setCategoryList(newList);
-      safeStorage.setItem(STORAGE_KEY, newList);
-      onCategoriesChange?.(newList);
-    },
-    [onCategoriesChange],
-  );
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState("");
@@ -98,24 +74,24 @@ export const CategoriesTab: React.FC<CategoriesTabProps> = ({ categories: extern
   };
 
   // Save (Add or Update) Category
-  const handleSaveCategory = (savedCategory: CollegeCategory) => {
+  const handleSaveCategory = async (savedCategory: CollegeCategory) => {
     if (editingCategory) {
       const updatedList = categoryList.map((c) => (c.id === savedCategory.id ? savedCategory : c));
-      saveCategories(updatedList);
+      if (!await saveCategories(updatedList)) return false;
       toast.success(`Category "${savedCategory.name}" updated successfully.`);
     } else {
       const updatedList = [...categoryList, savedCategory];
-      saveCategories(updatedList);
+      if (!await saveCategories(updatedList)) return false;
       toast.success(`Category "${savedCategory.name}" created successfully.`);
     }
   };
 
   // Delete Category
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!categoryToDelete) return;
     const deletedName = categoryToDelete.name;
     const updatedList = categoryList.filter((c) => c.id !== categoryToDelete.id);
-    saveCategories(updatedList);
+    if (!await saveCategories(updatedList)) return false;
     setCategoryToDelete(null);
     toast.success(`Category "${deletedName}" deleted successfully.`);
   };
@@ -205,6 +181,8 @@ export const CategoriesTab: React.FC<CategoriesTabProps> = ({ categories: extern
   );
 
   const hasActiveSearch = Boolean(searchQuery.trim());
+
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
 
   return (
     <div className={cn("space-y-4", className)}>

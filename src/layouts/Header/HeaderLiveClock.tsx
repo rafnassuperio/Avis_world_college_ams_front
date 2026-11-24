@@ -13,10 +13,18 @@ export const HeaderLiveClock: React.FC = memo(() => {
   const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-    return () => clearInterval(timer);
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const sync = () => {
+      if (timer !== undefined) clearInterval(timer);
+      timer = undefined;
+      if (!document.hidden) {
+        setCurrentTime(new Date());
+        timer = setInterval(() => setCurrentTime(new Date()), 1000);
+      }
+    };
+    document.addEventListener("visibilitychange", sync);
+    sync();
+    return () => { if (timer !== undefined) clearInterval(timer); document.removeEventListener("visibilitychange", sync); };
   }, []);
 
   return (

@@ -8,7 +8,8 @@ import {
   CommissionTypeItem,
   CourseCommissionConfig,
 } from "../types";
-import { initialCoursesData } from "@/features/college/data/collegeTabData";
+import { courses } from "@/services/ams";
+import { useApiCollection } from "@/hooks/useApiCollection";
 import { cn } from "@/lib/utils";
 
 const calcTypeOptions: DropdownOption[] = [
@@ -20,7 +21,7 @@ export interface EditCourseCommissionModalProps {
   isOpen: boolean;
   onClose: () => void;
   config: CourseCommissionConfig | null;
-  onSave: (updatedConfig: CourseCommissionConfig) => void;
+  onSave: (updatedConfig: CourseCommissionConfig) => void | boolean | Promise<void | boolean>;
 }
 
 export const EditCourseCommissionModal: React.FC<EditCourseCommissionModalProps> = ({
@@ -29,6 +30,7 @@ export const EditCourseCommissionModal: React.FC<EditCourseCommissionModalProps>
   config,
   onSave,
 }) => {
+  const { data: initialCoursesData } = useApiCollection(courses);
   const formId = useId();
 
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
@@ -148,7 +150,7 @@ export const EditCourseCommissionModal: React.FC<EditCourseCommissionModalProps>
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
 
@@ -167,7 +169,7 @@ export const EditCourseCommissionModal: React.FC<EditCourseCommissionModalProps>
       lastUpdated: new Date().toISOString().split("T")[0],
     };
 
-    onSave(updatedConfig);
+    if (await onSave(updatedConfig) === false) return;
     onClose();
   };
 

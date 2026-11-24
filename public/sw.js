@@ -3,7 +3,7 @@
  * Progressive Web App (PWA) Service Worker
  */
 
-const CACHE_NAME = "avis-ams-cache-v2";
+const CACHE_NAME = "avis-ams-cache-v3";
 
 const STATIC_PRECACHE = [
   "/",
@@ -62,6 +62,8 @@ self.addEventListener("fetch", (event) => {
   // Skip non-GET requests and cross-origin external requests (except google fonts)
   if (request.method !== "GET") return;
   if (!url.protocol.startsWith("http")) return;
+  // Business records and authenticated downloads must always come from the server.
+  if (/^\/(api|sms-api|lms-api)(\/|$)/.test(url.pathname)) return;
 
   // Navigation requests: Network first with cached index fallback
   if (request.mode === "navigate") {

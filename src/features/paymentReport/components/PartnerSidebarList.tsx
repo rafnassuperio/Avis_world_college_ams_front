@@ -1,35 +1,32 @@
-import React, { useState, useMemo } from "react";
+import { getFinancePartners } from "@/services/reports";
+import { useApiQuery } from "@/hooks/useApiQuery";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { Pagination } from "@/components/ui/Pagination";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
+import React, { useState, useEffect } from "react";
 import { Search, Building, UserCheck, ChevronRight } from "lucide-react";
 import { AgentRepReportRecord } from "../types";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { cn } from "@/lib/utils";
 
 interface PartnerSidebarListProps {
-  partners: AgentRepReportRecord[];
+  totalCount: number;
   selectedPartnerId: string;
   onSelectPartner: (partner: AgentRepReportRecord) => void;
   entityType: "Agent" | "Representative";
 }
 
-export const PartnerSidebarList: React.FC<PartnerSidebarListProps> = ({ partners, selectedPartnerId, onSelectPartner, entityType }) => {
+export const PartnerSidebarList: React.FC<PartnerSidebarListProps> = ({ totalCount, selectedPartnerId, onSelectPartner, entityType }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
 
-  const filteredPartners = useMemo(() => {
-    return partners.filter((p) => {
-      const q = searchQuery.toLowerCase().trim();
-      const matchesSearch =
-        !q ||
-        p.name.toLowerCase().includes(q) ||
-        p.organization.toLowerCase().includes(q) ||
-        p.email.toLowerCase().includes(q) ||
-        p.id.toLowerCase().includes(q);
-
-      const matchesStatus = selectedStatus === "all" || p.payoutStatus.toLowerCase() === selectedStatus.toLowerCase();
-
-      return matchesSearch && matchesStatus;
-    });
-  }, [partners, searchQuery, selectedStatus]);
+  const filters = useDebouncedValue(JSON.stringify({type: entityType, search: searchQuery.trim() || undefined, status: selectedStatus === "all" ? undefined : selectedStatus}));
+  const [paging, setPaging] = useState({filters: "", page: 1});
+  const page = paging.filters === filters ? paging.page : 1;
+  const query = useApiQuery(signal => getFinancePartners({...JSON.parse(filters), page, limit: 8}, signal), [filters, page]);
+  const filteredPartners = query.data?.data || [];
+  const total = query.data?.total || 0;
+  useEffect(() => { if (!selectedPartnerId && filteredPartners[0]) onSelectPartner(filteredPartners[0]); }, [query.data, selectedPartnerId, onSelectPartner]);
 
   const isAgent = entityType === "Agent";
 
@@ -79,7 +76,7 @@ export const PartnerSidebarList: React.FC<PartnerSidebarListProps> = ({ partners
             <div>
               <h3 className="text-sm font-bold text-text-primary">{isAgent ? "Partner Agencies" : "Regional Liaisons"}</h3>
               <p className="text-[11px] text-text-muted">
-                {partners.length} {isAgent ? "contracted agents" : "designated reps"}
+                {totalCount} {isAgent ? "contracted agents" : "designated reps"}
               </p>
             </div>
           </div>
@@ -91,7 +88,7 @@ export const PartnerSidebarList: React.FC<PartnerSidebarListProps> = ({ partners
                 : "border border-brand-red/20 bg-brand-light-red/60 text-brand-red",
             )}
           >
-            {filteredPartners.length} of {partners.length}
+            {total} of {totalCount}
           </span>
         </div>
 
@@ -136,7 +133,7 @@ export const PartnerSidebarList: React.FC<PartnerSidebarListProps> = ({ partners
         className="flex-1 divide-y divide-brand-border/40 overflow-y-auto p-2"
         style={{ maxHeight: "640px" }}
       >
-        {filteredPartners.length === 0 ? (
+        {query.loading || query.error ? <AsyncStateView isLoading={query.loading} error={query.error} onRetry={() => void query.reload()}>{null}</AsyncStateView> : filteredPartners.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-8 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-bg text-text-muted">
               <Search className="h-5 w-5" />
@@ -222,6 +219,7 @@ export const PartnerSidebarList: React.FC<PartnerSidebarListProps> = ({ partners
           })
         )}
       </div>
+      {total > 8 && <Pagination currentPage={page} totalPages={Math.ceil(total / 8)} onPageChange={page => setPaging({filters, page})} controlsOnly />}
     </div>
   );
 };

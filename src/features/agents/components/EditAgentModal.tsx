@@ -5,13 +5,14 @@ import { Edit3, Mail, Phone, Upload, Building2, Check } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Dropdown, DropdownOption } from "@/components/ui/Dropdown";
 import countriesData from "@/data/country.json";
-import { getRepresentativesList } from "@/features/representatives/data/mockRepresentativesData";
+import { representatives } from "@/services/ams";
+import { useApiCollection } from "@/hooks/useApiCollection";
 
 export interface EditAgentModalProps {
   isOpen: boolean;
   onClose: () => void;
   agent: AgentItem | null;
-  onSave: (updatedAgent: AgentItem) => void;
+  onSave: (updatedAgent: AgentItem) => void | boolean | Promise<void | boolean>;
 }
 
 export const EditAgentModal: React.FC<EditAgentModalProps> = ({
@@ -20,6 +21,7 @@ export const EditAgentModal: React.FC<EditAgentModalProps> = ({
   agent,
   onSave,
 }) => {
+  const { data: reps } = useApiCollection(representatives);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -33,9 +35,9 @@ export const EditAgentModal: React.FC<EditAgentModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const representativeOptions: DropdownOption[] = useMemo(() => {
-    const reps = getRepresentativesList();
+
     if (reps.length === 0) {
-      return [{ label: "General Administration", value: "General Administration" }];
+      return [];
     }
     return reps.map((r) => ({
       label: `${r.name} (${r.country})`,
@@ -100,7 +102,7 @@ export const EditAgentModal: React.FC<EditAgentModalProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       setError("Please enter the Agent's Full Name.");
@@ -131,7 +133,7 @@ export const EditAgentModal: React.FC<EditAgentModalProps> = ({
       avatarUrl,
     };
 
-    onSave(updated);
+    if (await onSave(updated) === false) return;
     onClose();
   };
 

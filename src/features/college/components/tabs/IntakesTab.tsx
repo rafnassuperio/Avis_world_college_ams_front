@@ -15,9 +15,9 @@ import {
   ChevronDown,
   StepForward,
 } from "lucide-react";
-import { initialIntakesData } from "../../data/collegeTabData";
+
 import { CollegeIntake, IntakeTimetable } from "../../types";
-import { getIntakeTimetables } from "../../data/timetableData";
+
 import { DataTable, ColumnDef } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
 import { FilterSelect, FilterSelectOption } from "@/components/ui/FilterSelect";
@@ -27,7 +27,9 @@ import { Pagination } from "@/components/ui/Pagination";
 import { IntakeModal, normalizeIntakeStatus } from "../IntakeModal";
 import { TimetablePdfModal } from "../TimetablePdfModal";
 import { toast } from "@/components/common/ToastMessage";
-import { safeStorage } from "@/lib/security";
+import { intakes } from "@/services/ams";
+import { useApiCollection } from "@/hooks/useApiCollection";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { cn } from "@/lib/utils";
 
 export interface IntakesTabProps {
@@ -35,8 +37,6 @@ export interface IntakesTabProps {
   className?: string;
   onIntakesChange?: (intakes: CollegeIntake[]) => void;
 }
-
-const STORAGE_KEY = "ams_college_intakes_list";
 
 /** Format dates into readable string like "19 Jan 2026" */
 const formatDisplayDate = (dateStr?: string): string => {
@@ -71,29 +71,9 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; border: string; 
   },
 };
 
-export const IntakesTab: React.FC<IntakesTabProps> = ({ intakes: externalIntakes, className, onIntakesChange }) => {
-  // Intakes list state with local persistence
-  const [intakeList, setIntakeList] = useState<CollegeIntake[]>(() => {
-    if (externalIntakes && externalIntakes.length > 0) return externalIntakes;
-    return safeStorage.getItem<CollegeIntake[]>(STORAGE_KEY, initialIntakesData);
-  });
+export const IntakesTab: React.FC<IntakesTabProps> = ({ className }) => {
+  const { data: intakeList, saveList: saveIntakes, loading, error, reload } = useApiCollection(intakes);
 
-  // Keep in sync if parent passes updated intakes
-  useEffect(() => {
-    if (externalIntakes && externalIntakes.length > 0) {
-      setIntakeList(externalIntakes);
-    }
-  }, [externalIntakes]);
-
-  // Persist intake changes
-  const saveIntakes = useCallback(
-    (newList: CollegeIntake[]) => {
-      setIntakeList(newList);
-      safeStorage.setItem(STORAGE_KEY, newList);
-      onIntakesChange?.(newList);
-    },
-    [onIntakesChange],
-  );
 
   // Filters State
   const [searchQuery, setSearchQuery] = useState("");
@@ -142,7 +122,7 @@ export const IntakesTab: React.FC<IntakesTabProps> = ({ intakes: externalIntakes
       const query = searchQuery.trim().toLowerCase();
       const name = (item.intakeName || item.name || "").toLowerCase();
       const month = (item.intakeMonth || "").toLowerCase();
-      const year = (item.year || item.academicYear || "").toLowerCase();
+      const year = String(item.year || item.academicYear || "").toLowerCase();
       const status = normalizeIntakeStatus(item.status);
       const intakeDate = (item.intakeDate || item.commenceDate || "").toLowerCase();
       const completionDate = (item.completionDate || "").toLowerCase();
@@ -199,34 +179,34 @@ export const IntakesTab: React.FC<IntakesTabProps> = ({ intakes: externalIntakes
     setIsModalOpen(true);
   };
 
-  const handleSaveIntake = (savedIntake: CollegeIntake) => {
+  const handleSaveIntake = async (savedIntake: CollegeIntake) => {
     if (editingIntake) {
       // Edit mode
       const updatedList = intakeList.map((item) => (item.id === savedIntake.id ? savedIntake : item));
-      saveIntakes(updatedList);
+      if (!await saveIntakes(updatedList)) return false;
       toast.success(`Intake "${savedIntake.intakeName || savedIntake.name}" updated successfully.`);
     } else {
       // Add mode
       const updatedList = [savedIntake, ...intakeList];
-      saveIntakes(updatedList);
+      if (!await saveIntakes(updatedList)) return false;
       toast.success(`Intake "${savedIntake.intakeName || savedIntake.name}" created successfully.`);
     }
   };
 
   // Quick inline status change handler
-  const handleStatusChange = (intake: CollegeIntake, newStatus: string) => {
+  const handleStatusChange = async (intake: CollegeIntake, newStatus: string) => {
     const normalized = normalizeIntakeStatus(newStatus);
     const updatedList = intakeList.map((item) => (item.id === intake.id ? { ...item, status: normalized } : item));
-    saveIntakes(updatedList);
+    if (!await saveIntakes(updatedList)) return false;
     toast.success(`Status for "${intake.intakeName || intake.name}" set to ${normalized}.`);
   };
 
   // Delete Handler
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!intakeToDelete) return;
     const target = intakeToDelete;
     const updatedList = intakeList.filter((item) => item.id !== target.id);
-    saveIntakes(updatedList);
+    if (!await saveIntakes(updatedList)) return false;
     toast.success(`Intake "${target.intakeName || target.name}" was successfully removed.`);
     setIntakeToDelete(null);
   };
@@ -479,7 +459,7 @@ export const IntakesTab: React.FC<IntakesTabProps> = ({ intakes: externalIntakes
    * Render Available Timetables in a Card Format for the expanded row
    */
   const renderTimetablesSection = (intake: CollegeIntake) => {
-    const timetables = getIntakeTimetables(intake);
+    const timetables = (intake.timetables || []);
 
     return (
       <div className="border-t border-brand-border/60 bg-gradient-to-b from-brand-bg/40 to-brand-bg/70 p-3 sm:p-5">
@@ -573,6 +553,8 @@ export const IntakesTab: React.FC<IntakesTabProps> = ({ intakes: externalIntakes
       </div>
     );
   };
+
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
 
   return (
     <div className={cn("space-y-4", className)}>

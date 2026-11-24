@@ -9,10 +9,10 @@ import {
 } from 'recharts';
 import {  Sparkles } from 'lucide-react';
 import { Dropdown } from '@/components/ui/Dropdown';
-import {
-  monthlyStudentsByFilter,
-  MonthlyStudentPoint,
-} from '@/data/mockData';
+import { MonthlyStudentPoint } from "@/types";
+import { useAnalytics, monthsForFilter } from "@/services/analytics";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
+
 
 interface CustomTooltipProps {
   active?: boolean;
@@ -78,8 +78,13 @@ const MonthlyStudentsChartComponent: React.FC = () => {
     { label: 'By Program', value: 'By Program' },
   ];
 
-  const currentData =
-    monthlyStudentsByFilter[selectedFilter] || monthlyStudentsByFilter['Last 6 Months'];
+  const { data, loading, error, reload } = useAnalytics();
+  const months = monthsForFilter(data?.monthly || [], selectedFilter);
+  const total = months.reduce((sum, m) => sum + m.students, 0);
+  const peak = months.reduce((max, m) => m.students > (max?.students || 0) ? m : max, months[0]);
+  const currentData = { peakMonth: peak?.month || "—", activeStudents: data?.totals.students || 0, newStudents: total, averageMonthly: months.length ? Math.round(total / months.length) : 0,
+    points: selectedFilter === "By Program" ? (data?.studentPrograms || []).map(m => ({ ...m, isHighlighted: false })) : months.map(m => ({ month: m.month, students: m.students, isHighlighted: m === peak })) };
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
 
   return (
     <div className="h-full bg-white rounded-[20px] p-5 border border-brand-border shadow-[0_2px_10px_-2px_rgba(87,0,31,0.03)] hover:shadow-[0_8px_24px_-4px_rgba(87,0,31,0.06)] transition-all duration-300 flex flex-col justify-between">

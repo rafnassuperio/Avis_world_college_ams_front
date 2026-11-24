@@ -27,8 +27,8 @@ export const dashboardContainerVariants: Variants = {
   visible: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.08,
-      delayChildren: 0.02,
+      staggerChildren: 0.02,
+      delayChildren: 0,
     },
   },
 };
@@ -39,13 +39,13 @@ export const dashboardContainerVariants: Variants = {
 export const dashboardSectionVariants: Variants = {
   hidden: {
     opacity: 0,
-    y: 18,
+    y: 6,
   },
   visible: {
     opacity: 1,
     y: 0,
     transition: {
-      duration: 0.5,
+      duration: 0.18,
       ease: smoothEase,
     },
   },
