@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { AdminAuditLog } from "../types";
-import { adminAuditLogsData } from "../data/mockProfileData";
+import { useServerActivity } from "@/hooks/useServerActivity";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/common/ToastMessage";
 import {
@@ -14,6 +14,8 @@ import {
 import { cn } from "@/lib/utils";
 
 export const ProfileAuditLogsTab: React.FC = () => {
+  const { data } = useServerActivity();
+  const adminAuditLogsData: AdminAuditLog[] = (data || []).map(a => ({ id: a.id, action: a.title, category: "system", timestamp: a.timestamp || "", ipAddress: "", location: "", status: a.status === "flagged" ? "warning" : "success", detail: a.detail }));
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
@@ -26,7 +28,7 @@ export const ProfileAuditLogsTab: React.FC = () => {
         log.ipAddress.includes(searchQuery);
       return matchesCategory && matchesSearch;
     });
-  }, [searchQuery, selectedCategory]);
+  }, [searchQuery, selectedCategory, data]);
 
   const handleExport = () => {
     const headers = ["Action", "Category", "Timestamp", "IP Address", "Location", "Detail"];

@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { Users, GraduationCap, Layers, IndianRupee, ArrowUpRight } from 'lucide-react';
-import { statCardsData } from '@/data/mockData';
+import { useAnalytics } from "@/services/analytics";
 import { motion } from 'framer-motion';
 import { smoothEase } from '@/components/animations/transitions';
 import { StatCardFluidWave } from './StatCardFluidWave';
 
 export const StatisticsCards: React.FC = () => {
+  const { data } = useAnalytics();
+  const statCardsData = [{ id: "students", title: "Total Students", value: String(data?.totals.students ?? "—"), change: "—", iconName: "Users", iconColor: "#A64C61", iconBgColor: "", subtitle: "" }, { id: "agents", title: "Total Agents", value: String(data?.totals.agents ?? "—"), change: "—", iconName: "Users", iconColor: "#702B40", iconBgColor: "", subtitle: "" }];
+  statCardsData.push({ id: "representatives", title: "Total Representatives", value: String(data?.totals.representatives ?? "—"), change: "—", iconName: "GraduationCap", iconColor: "#702B40", iconBgColor: "", subtitle: "" }, { id: "applications", title: "Agent Applications", value: String(data?.totals.agentApplications ?? "—"), change: "—", iconName: "Layers", iconColor: "#A64C61", iconBgColor: "", subtitle: "" });
   const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
 
   const getIcon = (name: string) => {

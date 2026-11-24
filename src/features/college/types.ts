@@ -1,4 +1,5 @@
 export interface CollegeDetails {
+  currency?: string;
   id?: string;
   name: string;
   image: string;
@@ -112,6 +113,8 @@ export interface CourseRequirement {
 }
 
 export interface CourseFeeBreakdown {
+  totalFee?: number;
+  discount?: number;
   id: string;
   name: string;
   schemeCode: string;
@@ -214,6 +217,7 @@ export interface CollegeCategory {
 }
 
 export interface CollegeOverseasRequest {
+  documents?: Array<{ id: string; name: string; status: string; detail: string }>;
   id: string;
   requestId: string;
   applicantName: string;

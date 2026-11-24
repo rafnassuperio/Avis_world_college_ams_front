@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Search, Plus, Edit2, Trash2, Clock, DollarSign, Layers, RotateCcw, X } from "lucide-react";
-import { initialCoursesData, initialCategoriesData } from "../../data/collegeTabData";
+
 import { CollegeCourse } from "../../types";
 import { DataTable, ColumnDef } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
@@ -9,9 +9,11 @@ import { FilterSelect } from "@/components/ui/FilterSelect";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { DeleteModal } from "@/components/ui/DeleteModal";
 import { Pagination } from "@/components/ui/Pagination";
-import { CourseModal, DEFAULT_CATEGORIES } from "../CourseModal";
+import { CourseModal } from "../CourseModal";
 import { toast } from "@/components/common/ToastMessage";
-import { safeStorage } from "@/lib/security";
+import { courses } from "@/services/ams";
+import { useApiCollection } from "@/hooks/useApiCollection";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { cn } from "@/lib/utils";
 
 export interface CoursesTabProps {
@@ -21,31 +23,9 @@ export interface CoursesTabProps {
   onCoursesChange?: (courses: CollegeCourse[]) => void;
 }
 
-const STORAGE_KEY = "ams_college_courses_list";
+export const CoursesTab: React.FC<CoursesTabProps> = ({ className, levelFilter }) => {
+  const { data: courseList, saveList: saveCourses, loading, error, reload } = useApiCollection(courses);
 
-export const CoursesTab: React.FC<CoursesTabProps> = ({ courses: externalCourses, className, levelFilter, onCoursesChange }) => {
-  // Courses List state with safe local persistence
-  const [courseList, setCourseList] = useState<CollegeCourse[]>(() => {
-    if (externalCourses && externalCourses.length > 0) return externalCourses;
-    return safeStorage.getItem<CollegeCourse[]>(STORAGE_KEY, initialCoursesData);
-  });
-
-  // Keep in sync if parent passes updated courses prop
-  useEffect(() => {
-    if (externalCourses && externalCourses.length > 0) {
-      setCourseList(externalCourses);
-    }
-  }, [externalCourses]);
-
-  // Persist course changes
-  const saveCourses = useCallback(
-    (newList: CollegeCourse[]) => {
-      setCourseList(newList);
-      safeStorage.setItem(STORAGE_KEY, newList);
-      onCoursesChange?.(newList);
-    },
-    [onCoursesChange],
-  );
 
   // Filters State
   const [searchQuery, setSearchQuery] = useState("");
@@ -63,8 +43,8 @@ export const CoursesTab: React.FC<CoursesTabProps> = ({ courses: externalCourses
   // Available categories derived dynamically from both category dataset and courses list
   const availableCategories = useMemo(() => {
     const categoriesSet = new Set<string>();
-    initialCategoriesData.forEach((c) => categoriesSet.add(c.name));
-    DEFAULT_CATEGORIES.forEach((c: string) => categoriesSet.add(c));
+
+
     courseList.forEach((c) => {
       if (c.category) categoriesSet.add(c.category);
     });
@@ -124,26 +104,26 @@ export const CoursesTab: React.FC<CoursesTabProps> = ({ courses: externalCourses
     setIsModalOpen(true);
   };
 
-  const handleSaveCourse = (savedCourse: CollegeCourse) => {
+  const handleSaveCourse = async (savedCourse: CollegeCourse) => {
     if (editingCourse) {
       // Edit mode
       const updatedList = courseList.map((c) => (c.id === savedCourse.id ? savedCourse : c));
-      saveCourses(updatedList);
+      if (!await saveCourses(updatedList)) return false;
       toast.success(`Course "${savedCourse.code}" updated successfully.`);
     } else {
       // Add mode
       const updatedList = [savedCourse, ...courseList];
-      saveCourses(updatedList);
+      if (!await saveCourses(updatedList)) return false;
       toast.success(`Course "${savedCourse.code} - ${savedCourse.title}" created successfully.`);
     }
   };
 
   // Delete Handler
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!courseToDelete) return;
     const target = courseToDelete;
     const updatedList = courseList.filter((c) => c.id !== target.id);
-    saveCourses(updatedList);
+    if (!await saveCourses(updatedList)) return false;
     toast.success(`Course "${target.code}" was successfully removed.`);
     setCourseToDelete(null);
   };
@@ -285,6 +265,8 @@ export const CoursesTab: React.FC<CoursesTabProps> = ({ courses: externalCourses
     ],
     [currentPage, pageSize],
   );
+
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
 
   return (
     <div className={cn("space-y-4", className)}>

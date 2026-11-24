@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import {
@@ -27,7 +27,9 @@ import { FilterSelect, FilterSelectOption } from "@/components/ui/FilterSelect";
 import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/ui/Pagination";
 import { dashboardContainerVariants, dashboardSectionVariants } from "@/components/animations/transitions";
-import { getAgentsList, saveAgentsList } from "./data/mockAgentsData";
+import { agents } from "@/services/ams";
+import { useApiCollection } from "@/hooks/useApiCollection";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { AgentItem, AgentType } from "./types";
 import { ROUTES } from "@/app/routes";
 import { AddAgentModal } from "./components/AddAgentModal";
@@ -44,7 +46,7 @@ export const TotalAgentsPage: React.FC = () => {
   const sectionVariants = shouldReduceMotion ? { hidden: { opacity: 1 }, visible: { opacity: 1 } } : dashboardSectionVariants;
 
   // Master agents state
-  const [agentsList, setAgentsList] = useState<AgentItem[]>(() => getAgentsList());
+  const { data: agentsList, saveList: updateAgentsList, loading, error, reload } = useApiCollection(agents);
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -63,35 +65,32 @@ export const TotalAgentsPage: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   // Persistence handler
-  const updateAgentsList = useCallback((updated: AgentItem[]) => {
-    setAgentsList(updated);
-    saveAgentsList(updated);
-  }, []);
+
 
   // Add Agent
-  const handleAddAgent = (newAgent: AgentItem) => {
+  const handleAddAgent = async (newAgent: AgentItem) => {
     const updated = [newAgent, ...agentsList];
-    updateAgentsList(updated);
+    if (!await updateAgentsList(updated)) return false;
     toast.success("Agent Added", {
       description: `${newAgent.name} has been successfully added to the roster.`,
     });
   };
 
   // Edit Agent
-  const handleSaveAgent = (updatedAgent: AgentItem) => {
+  const handleSaveAgent = async (updatedAgent: AgentItem) => {
     const updated = agentsList.map((a) => (a.id === updatedAgent.id ? updatedAgent : a));
-    updateAgentsList(updated);
+    if (!await updateAgentsList(updated)) return false;
     toast.success("Agent Updated", {
       description: `Details for ${updatedAgent.name} have been saved successfully.`,
     });
   };
 
   // Delete Agent
-  const handleDeleteAgent = () => {
+  const handleDeleteAgent = async () => {
     if (!selectedAgentForDelete) return;
     const agentToDelete = selectedAgentForDelete;
     const updated = agentsList.filter((a) => a.id !== agentToDelete.id);
-    updateAgentsList(updated);
+    if (!await updateAgentsList(updated)) return false;
 
     if (selectedAgentForEdit?.id === agentToDelete.id) {
       setSelectedAgentForEdit(null);
@@ -409,6 +408,8 @@ export const TotalAgentsPage: React.FC = () => {
     ],
     [navigate, currentPage, pageSize],
   );
+
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
 
   return (
     <motion.div

@@ -20,7 +20,7 @@ export const StudentDocumentPreviewModal: React.FC<StudentDocumentPreviewModalPr
   student,
   documentTitle,
   documentType,
-  generatedDate = "Aug 15, 2026",
+  generatedDate = "",
   intakePeriod,
 }) => {
   const contentRef = useRef<HTMLDivElement>(null);
@@ -30,7 +30,7 @@ export const StudentDocumentPreviewModal: React.FC<StudentDocumentPreviewModalPr
   };
 
   const formatCurrency = (val: number | string | undefined): string => {
-    if (val === undefined || val === null || val === "") return "$2,583.30";
+    if (val === undefined || val === null || val === "") return "—";
     const num = typeof val === "number" ? val : parseFloat(val);
     if (isNaN(num)) return String(val);
     return new Intl.NumberFormat("en-SG", {
@@ -121,7 +121,7 @@ export const StudentDocumentPreviewModal: React.FC<StudentDocumentPreviewModalPr
                   <span>EduTrust Certified</span>
                 </div>
                 <div className="mt-1 font-mono text-[10px] text-slate-400">
-                  Ref: AWC/DOC/{student.studentId || "2026-001"}
+                  Ref: AWC/DOC/{student.studentId || "—"}
                 </div>
               </div>
             </div>
@@ -151,15 +151,15 @@ export const StudentDocumentPreviewModal: React.FC<StudentDocumentPreviewModalPr
               </div>
               <div>
                 <span className="text-slate-500 block text-[10px] uppercase">Passport / NRIC</span>
-                <span className="font-semibold text-slate-800">{student.passportNo || student.passportOrNric || "E7892145"}</span>
+                <span className="font-semibold text-slate-800">{student.passportNo || student.passportOrNric || "—"}</span>
               </div>
               <div>
                 <span className="text-slate-500 block text-[10px] uppercase">Nationality</span>
-                <span className="font-semibold text-slate-800">{student.nationality || "Singaporean"}</span>
+                <span className="font-semibold text-slate-800">{student.nationality || "—"}</span>
               </div>
               <div>
                 <span className="text-slate-500 block text-[10px] uppercase">Date of Birth</span>
-                <span className="font-semibold text-slate-800">{student.dateOfBirth || "14 Jun 2002"}</span>
+                <span className="font-semibold text-slate-800">{student.dateOfBirth || "—"}</span>
               </div>
               <div className="sm:col-span-2">
                 <span className="text-slate-500 block text-[10px] uppercase">Course Enrolled</span>
@@ -167,11 +167,11 @@ export const StudentDocumentPreviewModal: React.FC<StudentDocumentPreviewModalPr
               </div>
               <div>
                 <span className="text-slate-500 block text-[10px] uppercase">Intake</span>
-                <span className="font-semibold text-slate-800">{intakePeriod || student.intake || "September 2026"}</span>
+                <span className="font-semibold text-slate-800">{intakePeriod || student.intake || "—"}</span>
               </div>
               <div>
                 <span className="text-slate-500 block text-[10px] uppercase">Study Mode</span>
-                <span className="font-semibold text-slate-800">{student.studyMode || "Full-Time"}</span>
+                <span className="font-semibold text-slate-800">{student.studyMode || "—"}</span>
               </div>
             </div>
           </div>
@@ -186,8 +186,8 @@ export const StudentDocumentPreviewModal: React.FC<StudentDocumentPreviewModalPr
                 <p>
                   Avis World College Pte Ltd undertakes to provide the Course known as{" "}
                   <strong>{student.course}</strong> to the Student commencing on{" "}
-                  <strong>{student.commencementDate || student.joinedDate || "15 September 2026"}</strong> and scheduled to conclude on{" "}
-                  <strong>{student.completionDate || "14 September 2027"}</strong>.
+                  <strong>{student.commencementDate || student.joinedDate || "—"}</strong> and scheduled to conclude on{" "}
+                  <strong>{student.completionDate || "—"}</strong>.
                 </p>
               </div>
 
@@ -238,7 +238,7 @@ export const StudentDocumentPreviewModal: React.FC<StudentDocumentPreviewModalPr
               </p>
               <p>
                 We are pleased to issue this <strong>Conditional Letter of Offer (CLOO)</strong> for admission into{" "}
-                <strong>{student.course}</strong> at Avis World College Pte Ltd for the <strong>{student.intake || "September 2026"}</strong> intake.
+                <strong>{student.course}</strong> at Avis World College Pte Ltd for the <strong>{student.intake || "—"}</strong> intake.
               </p>
               <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5">
                 <div className="flex items-center gap-2 font-bold text-amber-800 text-[11px] uppercase mb-1.5">
@@ -264,14 +264,14 @@ export const StudentDocumentPreviewModal: React.FC<StudentDocumentPreviewModalPr
               </p>
               <p>
                 Avis World College is delighted to offer you admission into the <strong>{student.course}</strong> commencing on{" "}
-                <strong>{student.commencementDate || student.joinedDate || "15 September 2026"}</strong>.
+                <strong>{student.commencementDate || student.joinedDate || "—"}</strong>.
               </p>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
                 <h4 className="font-bold text-slate-900 text-[11px] uppercase mb-2">Offer Highlights:</h4>
                 <ul className="list-disc pl-5 space-y-1 text-slate-700">
-                  <li>Programme: <strong>{student.course}</strong> ({student.courseCode || "AWC-DIB-2026"})</li>
-                  <li>Enrollment Classification: <strong>{student.studentType || "International"} Student</strong></li>
-                  <li>Intake Schedule: <strong>{student.intake || "September 2026"}</strong></li>
+                  <li>Programme: <strong>{student.course}</strong> ({student.courseCode || "—"})</li>
+                  <li>Enrollment Classification: <strong>{student.studentType || "—"} Student</strong></li>
+                  <li>Intake Schedule: <strong>{student.intake || "—"}</strong></li>
                   <li>Total Fee Assessment: <strong>{totalFeesDisplay}</strong></li>
                 </ul>
               </div>

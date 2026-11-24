@@ -12,70 +12,70 @@ export const StudentAcademicsTab: React.FC<StudentAcademicsTabProps> = ({ studen
   const academicFields: InfoFieldItem[] = [
     {
       label: "College",
-      value: student.college || "Acetek College",
+      value: student.college || "—",
       badgeText: "Private Education Institution",
       badgeVariant: "brand",
     },
     {
       label: "Intake",
-      value: student.intake || "January",
+      value: student.intake || "—",
     },
     {
       label: "Intake Name",
-      value: student.intakeName || "HDIT2601",
+      value: student.intakeName || "—",
       isMono: true,
       isCopyable: true,
     },
     {
       label: "Course",
-      value: student.course || "HIGHER DIPLOMA IN IT",
-      badgeText: student.courseCode || "HDIT",
+      value: student.course || "—",
+      badgeText: student.courseCode || "—",
       badgeVariant: "brand",
       colSpan: 2,
     },
     {
       label: "Class",
-      value: student.class || "N/A",
+      value: student.class || "—",
     },
     {
       label: "Highest Academic Qualification",
-      value: student.highestQualification || "OTHER POST-SECONDARY CERTIFICATES",
+      value: student.highestQualification || "—",
       colSpan: 2,
     },
     {
       label: "Study Mode",
-      value: student.studyMode || "N/A",
+      value: student.studyMode || "—",
     },
     {
       label: "PE Course Title",
-      value: student.peCourseTitle || "Diploma in Culinary and Baking",
+      value: student.peCourseTitle || "—",
       colSpan: 2,
     },
     {
       label: "Course Delivery Mode",
-      value: student.courseDeliveryMode || "N/A",
+      value: student.courseDeliveryMode || "—",
     },
     {
       label: "Course Commencement Date",
-      value: student.commencementDate || "05/01/2026",
+      value: student.commencementDate || "—",
       isMono: true,
       icon: Calendar,
     },
     {
       label: "Course Completion Date",
-      value: student.completionDate || "05/06/2026",
+      value: student.completionDate || "—",
       isMono: true,
       icon: Calendar,
     },
     {
       label: "Application Date",
-      value: student.applicationDate || "N/A",
+      value: student.applicationDate || "—",
       isMono: true,
     },
     {
       label: "Student Status",
-      value: student.studentStatus || student.status || "Enrolled",
-      badgeText: student.status || "Enrolled",
+      value: student.studentStatus || student.status || "—",
+      badgeText: student.status || "—",
       badgeVariant: "emerald",
       colSpan: 2,
     },
@@ -126,7 +126,7 @@ export const StudentAcademicsTab: React.FC<StudentAcademicsTabProps> = ({ studen
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           <div className="rounded-xl border border-brand-border/60 bg-brand-bg/40 p-3">
             <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Application</div>
-            <div className="mt-1 font-mono text-xs font-bold text-text-primary">{student.applicationDate || student.joinedDate || "N/A"}</div>
+            <div className="mt-1 font-mono text-xs font-bold text-text-primary">{student.applicationDate || student.joinedDate || "—"}</div>
             <div className="mt-1 text-[10px] text-text-muted">Submitted to Admissions</div>
           </div>
 
@@ -138,13 +138,13 @@ export const StudentAcademicsTab: React.FC<StudentAcademicsTabProps> = ({ studen
 
           <div className="rounded-xl border border-brand-border/60 bg-brand-bg/40 p-3">
             <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Commencement</div>
-            <div className="mt-1 font-mono text-xs font-bold text-text-primary">{student.commencementDate || "05/01/2026"}</div>
+            <div className="mt-1 font-mono text-xs font-bold text-text-primary">{student.commencementDate || "—"}</div>
             <div className="mt-1 text-[10px] text-text-muted">Classes Started</div>
           </div>
 
           <div className="rounded-xl border border-brand-border/60 bg-brand-bg/40 p-3">
             <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Expected Completion</div>
-            <div className="mt-1 font-mono text-xs font-bold text-burgundy-primary">{student.completionDate || "05/06/2026"}</div>
+            <div className="mt-1 font-mono text-xs font-bold text-burgundy-primary">{student.completionDate || "—"}</div>
             <div className="mt-1 text-[10px] text-text-muted">Final Assessment</div>
           </div>
         </div>

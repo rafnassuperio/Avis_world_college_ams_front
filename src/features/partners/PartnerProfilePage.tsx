@@ -8,9 +8,13 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/components/common/ToastMessage";
 
 // Agent & Representative Roster Storage
-import { getAgentsList, saveAgentsList } from "@/features/agents/data/mockAgentsData";
+import { agents, representatives } from "@/services/ams";
+import { useApiCollection } from "@/hooks/useApiCollection";
+import { getFinancePartner } from "@/services/reports";
+import { useApiQuery } from "@/hooks/useApiQuery";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { AgentItem } from "@/features/agents/types";
-import { getRepresentativesList, saveRepresentativesList } from "@/features/representatives/data/mockRepresentativesData";
+
 import { RepresentativeItem } from "@/features/representatives/types";
 
 // Partner Components
@@ -20,7 +24,7 @@ import { PartnerPerformanceTab } from "./components/PartnerPerformanceTab";
 import { EditPartnerModal } from "./components/EditPartnerModal";
 
 // Mock Metrics & Applications
-import { getMockApplicationsForPartner, getMockKPIsForPartner } from "./data/mockPartnerMetrics";
+
 import { PartnerType, PartnerTabId } from "./types";
 
 const iosSpringTransition = {
@@ -43,8 +47,8 @@ export const PartnerProfilePage: React.FC = () => {
   const params = useParams<{ partnerType?: string; partnerId?: string }>();
 
   // Master lists
-  const [agentsList, setAgentsList] = useState<AgentItem[]>(() => getAgentsList());
-  const [representativesList, setRepresentativesList] = useState<RepresentativeItem[]>(() => getRepresentativesList());
+  const { data: agentsList, saveList: saveAgentsList, loading: loadingAgents, error: agentError } = useApiCollection(agents);
+  const { data: representativesList, saveList: saveRepresentativesList, loading: loadingReps, error: repError } = useApiCollection(representatives);
 
   // Determine active partner type and ID from query, path params, or location state
   const rawType = params.partnerType || searchParams.get("type") || (location.state?.partnerType as string);
@@ -60,7 +64,7 @@ export const PartnerProfilePage: React.FC = () => {
 
   const [activePartnerId, setActivePartnerId] = useState<string>(() => {
     if (rawId) return rawId;
-    return partnerType === "representative" ? representativesList[0]?.id || "rep-1" : agentsList[0]?.id || "ag-1";
+    return partnerType === "representative" ? representativesList[0]?.id || "" : agentsList[0]?.id || "";
   });
 
   const tabParam = searchParams.get("tab") as PartnerTabId;
@@ -87,14 +91,14 @@ export const PartnerProfilePage: React.FC = () => {
   // Current Agent / Representative data
   const currentAgent = useMemo<AgentItem | null>(() => {
     if (partnerType !== "agent") return null;
-    return agentsList.find((a) => a.id === activePartnerId || a.agentCode === activePartnerId || a.name === activePartnerId) || agentsList[0] || null;
+    return agentsList.find((a) => a.id === activePartnerId || a.agentCode === activePartnerId || a.name === activePartnerId) || (!activePartnerId ? agentsList[0] : null) || null;
   }, [partnerType, activePartnerId, agentsList]);
 
   const currentRepresentative = useMemo<RepresentativeItem | null>(() => {
     if (partnerType !== "representative") return null;
     return (
       representativesList.find((r) => r.id === activePartnerId || r.repCode === activePartnerId || r.name === activePartnerId) ||
-      representativesList[0] ||
+      (!activePartnerId ? representativesList[0] : null) ||
       null
     );
   }, [partnerType, activePartnerId, representativesList]);
@@ -103,14 +107,12 @@ export const PartnerProfilePage: React.FC = () => {
   const activeName = partnerType === "agent" ? currentAgent?.name : currentRepresentative?.name;
   const activeCode = partnerType === "agent" ? currentAgent?.agentCode : currentRepresentative?.repCode;
 
-  // Mock applications and KPIs
-  const applications = useMemo(() => {
-    return getMockApplicationsForPartner(activeName || "Partner");
-  }, [activeName]);
-
-  const kpis = useMemo(() => {
-    return getMockKPIsForPartner(partnerType, partnerType === "representative" ? currentRepresentative?.agentCount : 0);
-  }, [partnerType, currentRepresentative]);
+  const partnerId = partnerType === "agent" ? currentAgent?.id : currentRepresentative?.id;
+  const {data: finance, loading: loadingFinance, error: financeError, reload} = useApiQuery(signal => partnerId ? getFinancePartner(partnerType === "agent" ? "Agent" : "Representative", partnerId, signal) : Promise.resolve({partner: null}), [partnerType, partnerId]);
+  const metrics = finance?.partner;
+  const kpis = { totalStudents: metrics?.studentsReferredCount || 0, activeApplications: metrics?.activeApplications || 0,
+    visaApprovalRate: 0, totalCommission: String(metrics?.earnedCommission || 0), earnedCommission: String(metrics?.amountPaid || 0), pendingCommission: String(metrics?.amountPending || 0),
+    totalCommissionPaid: String(metrics?.amountPaid || 0), partnerTier: "—", complianceRating: 0, contractRenewalDate: "—" };
 
   // Tab change handler
   const handleTabChange = (tabId: PartnerTabId) => {
@@ -150,17 +152,17 @@ export const PartnerProfilePage: React.FC = () => {
   );
 
   // Save Agent Changes
-  const handleSaveAgent = (updatedAgent: AgentItem) => {
+  const handleSaveAgent = async (updatedAgent: AgentItem) => {
     const updated = agentsList.map((a) => (a.id === updatedAgent.id ? updatedAgent : a));
-    setAgentsList(updated);
-    saveAgentsList(updated);
+    if (!await saveAgentsList(updated)) return false;
+    await reload();
   };
 
   // Save Representative Changes
-  const handleSaveRepresentative = (updatedRep: RepresentativeItem) => {
+  const handleSaveRepresentative = async (updatedRep: RepresentativeItem) => {
     const updated = representativesList.map((r) => (r.id === updatedRep.id ? updatedRep : r));
-    setRepresentativesList(updated);
-    saveRepresentativesList(updated);
+    if (!await saveRepresentativesList(updated)) return false;
+    await reload();
   };
 
   // Tab definitions
@@ -176,6 +178,8 @@ export const PartnerProfilePage: React.FC = () => {
       icon: GraduationCap,
     },
   ];
+
+  if (loadingAgents || loadingReps || loadingFinance || agentError || repError || financeError) return <AsyncStateView isLoading={loadingAgents || loadingReps || loadingFinance} error={agentError || repError || financeError} onRetry={() => window.location.reload()}>{null}</AsyncStateView>;
 
   return (
     <motion.div
@@ -291,7 +295,8 @@ export const PartnerProfilePage: React.FC = () => {
               <PartnerPerformanceTab
                 partnerType={partnerType}
                 partnerName={activeName || "Partner"}
-                applications={applications}
+                partnerId={partnerId || ""}
+                applicationCount={metrics?.applicationCount || 0}
                 kpis={kpis}
               />
             </motion.div>

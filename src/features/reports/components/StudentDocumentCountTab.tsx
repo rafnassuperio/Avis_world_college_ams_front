@@ -4,11 +4,13 @@ import { TableCard, Table, TableHeader, TableBody, TableRow, TableHead, TableCel
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/ui/Pagination";
-import { initialIntakeDocumentCounts } from "../data/reportsData";
-import { IntakeDocumentCountItem } from "../types";
+import { useAnalytics } from "@/services/analytics";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
+
 
 export const StudentDocumentCountTab: React.FC = () => {
-  const [data] = useState<IntakeDocumentCountItem[]>(initialIntakeDocumentCounts);
+  const { data: overview, loading, error, reload } = useAnalytics();
+  const data = overview?.documentCounts || [];
   const [searchQuery, setSearchQuery] = useState("");
 
   // Pagination State
@@ -40,6 +42,8 @@ export const StudentDocumentCountTab: React.FC = () => {
     const startIndex = (validCurrentPage - 1) * pageSize;
     return filteredData.slice(startIndex, startIndex + pageSize);
   }, [filteredData, validCurrentPage, pageSize]);
+
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
 
   return (
     <div className="space-y-4">

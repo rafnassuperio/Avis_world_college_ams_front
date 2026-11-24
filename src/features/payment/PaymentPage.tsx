@@ -29,7 +29,11 @@ import { dashboardContainerVariants, dashboardSectionVariants, smoothEase } from
 import { PaymentRecord, PaymentPageView } from "./types";
 import { PaymentHistoryModal } from "./components/PaymentHistoryModal";
 import { PaymentHistoryView } from "./components/PaymentHistoryView";
-import { getPaymentRecords, savePaymentRecords } from "./utils/paymentStorage";
+import { getPaymentPage, getPaymentCourses, getPaymentLedger, exportPayments, resetPayment } from "@/services/payments";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { apiMessage } from "@/services/ams";
+import { useApiQuery } from "@/hooks/useApiQuery";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { cn } from "@/lib/utils";
 
 export const PaymentPage: React.FC = () => {
@@ -50,16 +54,6 @@ export const PaymentPage: React.FC = () => {
   };
 
   // Dataset state synchronized with storage
-  const [records, setRecords] = useState<PaymentRecord[]>(() => getPaymentRecords());
-
-  // Listen for storage synchronization events across views/pages
-  useEffect(() => {
-    const handleSync = () => {
-      setRecords(getPaymentRecords());
-    };
-    window.addEventListener("ams_payment_records_updated", handleSync);
-    return () => window.removeEventListener("ams_payment_records_updated", handleSync);
-  }, []);
 
   // Search & Filter states
   const [searchQuery, setSearchQuery] = useState("");
@@ -71,8 +65,35 @@ export const PaymentPage: React.FC = () => {
   const [sortMethod, setSortMethod] = useState<string>("default");
 
   // Pagination states
-  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({ page: 1, filters: "" });
   const [pageSize, setPageSize] = useState(8);
+  const [exporting, setExporting] = useState(false);
+
+  const filters = useDebouncedValue(JSON.stringify({ search: searchQuery.trim(), courseName: selectedCourse === "All Courses" ? "" : selectedCourse,
+    status: selectedStatus !== "All Status" && selectedCardStatus !== "All Card Status" && (selectedStatus === "Paid") !== (selectedCardStatus === "Settled") ? "__no_match__" :
+      selectedStatus === "All Status" ? (selectedCardStatus === "All Card Status" ? "" : selectedCardStatus === "Settled" ? "paid" : "pending") : selectedStatus.toLowerCase(),
+    minAmount, maxAmount, sortBy: sortMethod === "default" ? "studentName" : "totalFees", sortOrder: sortMethod === "max-to-min" ? "desc" : "asc" }));
+  const currentPage = pagination.filters === filters ? pagination.page : 1;
+  const setCurrentPage = (page: number) => setPagination({ page, filters });
+  const { data, loading, error, reload } = useApiQuery(async signal => {
+    if (isHistoryView) return { records: [] as PaymentRecord[], total: 0 };
+    return getPaymentPage({ ...JSON.parse(filters), page: currentPage, limit: pageSize }, signal);
+  }, [filters, currentPage, pageSize, isHistoryView]);
+  const records = data?.records || [];
+  const { data: availableCourses } = useApiQuery(signal => isHistoryView ? Promise.resolve([] as string[]) : getPaymentCourses(signal), [isHistoryView]);
+  const openLedger = async (record: PaymentRecord) => {
+    try { setSelectedRecordForModal(await getPaymentLedger(record)); }
+    catch (error) { toast.error("Unable to load payment history", { description: apiMessage(error) }); }
+  };
+
+  // Listen for storage synchronization events across views/pages
+  useEffect(() => {
+    const handleSync = () => {
+      void reload();
+    };
+    window.addEventListener("ams_payment_records_updated", handleSync);
+    return () => window.removeEventListener("ams_payment_records_updated", handleSync);
+  }, [reload]);
 
   // Selected record for Payment History modal (opened via red eye button)
   const [selectedRecordForModal, setSelectedRecordForModal] = useState<PaymentRecord | null>(null);
@@ -91,18 +112,17 @@ export const PaymentPage: React.FC = () => {
       };
     }
     return {
-      initial: { opacity: 0, y: 14, filter: "blur(2px)" },
+      initial: { opacity: 0, y: 4 },
       animate: {
         opacity: 1,
         y: 0,
-        filter: "blur(0px)",
-        transition: { duration: 0.35, ease: smoothEase },
+
+        transition: { duration: 0.16, ease: smoothEase },
       },
       exit: {
         opacity: 0,
-        y: -10,
-        filter: "blur(2px)",
-        transition: { duration: 0.22, ease: smoothEase },
+        y: -4,
+        transition: { duration: 0.1, ease: smoothEase },
       },
     };
   }, [shouldReduceMotion]);
@@ -110,72 +130,16 @@ export const PaymentPage: React.FC = () => {
   // Range validation: min should not exceed max
   const isRangeInvalid = Boolean(minAmount.trim() !== "" && maxAmount.trim() !== "" && Number(minAmount) > Number(maxAmount));
 
-  // Unique course options dynamically extracted from dataset
-  const courseOptions = useMemo(() => {
-    const set = new Set<string>();
-    records.forEach((rec) => {
-      if (rec.student?.course) {
-        set.add(rec.student.course);
-      }
-    });
-    return [
-      { label: "All Courses", value: "All Courses" },
-      ...Array.from(set)
-        .sort((a, b) => a.localeCompare(b))
-        .map((course) => ({ label: course, value: course })),
-    ];
-  }, [records]);
-
-  // Filtered & sorted dataset (matching course, status, card, and typed min/max amounts, sorted min to max)
-  const filteredRecords = useMemo(() => {
-    const minVal = minAmount.trim() !== "" ? Number(minAmount) : null;
-    const maxVal = maxAmount.trim() !== "" ? Number(maxAmount) : null;
-
-    const list = records.filter((rec) => {
-      const q = searchQuery.trim().toLowerCase();
-      const matchesSearch =
-        !q ||
-        rec.no.includes(q) ||
-        rec.student.name.toLowerCase().includes(q) ||
-        rec.student.studentCode.toLowerCase().includes(q) ||
-        rec.student.course.toLowerCase().includes(q) ||
-        (rec.notes && rec.notes.toLowerCase().includes(q));
-
-      const matchesStatus = selectedStatus === "All Status" || rec.status.toLowerCase() === selectedStatus.toLowerCase();
-      const matchesCourse = selectedCourse === "All Courses" || rec.student.course.toLowerCase() === selectedCourse.toLowerCase();
-      const matchesCard = selectedCardStatus === "All Card Status" || rec.cardStatus.toLowerCase() === selectedCardStatus.toLowerCase();
-
-      // Number text typing min and max amount filters
-      const matchesMinAmount = minVal === null || rec.totalFee >= minVal;
-      const matchesMaxAmount = maxVal === null || rec.totalFee <= maxVal;
-
-      return matchesSearch && matchesStatus && matchesCourse && matchesCard && matchesMinAmount && matchesMaxAmount;
-    });
-
-    // Sort method: minimum to maximum sort (default) or maximum to minimum
-    if (sortMethod === "min-to-max") {
-      return [...list].sort((a, b) => a.totalFee - b.totalFee);
-    }
-    if (sortMethod === "max-to-min") {
-      return [...list].sort((a, b) => b.totalFee - a.totalFee);
-    }
-
-    return list;
-  }, [records, searchQuery, selectedStatus, selectedCourse, selectedCardStatus, minAmount, maxAmount, sortMethod]);
-
-  // Reset pagination on filter, typed amount, or sort method changes
-  React.useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, selectedStatus, selectedCourse, selectedCardStatus, minAmount, maxAmount, sortMethod]);
-
-  // Pagination slicing
-  const totalItems = filteredRecords.length;
+  const courseOptions = useMemo(() => [
+    { label: "All Courses", value: "All Courses" },
+    ...(availableCourses || []).map(course => ({ label: course, value: course })),
+  ], [availableCourses]);
+  const filteredRecords = records;
+  const totalItems = data?.total || 0;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const safePage = Math.min(currentPage, totalPages);
-  const paginatedRecords = useMemo(() => {
-    const start = (safePage - 1) * pageSize;
-    return filteredRecords.slice(start, start + pageSize);
-  }, [filteredRecords, safePage, pageSize]);
+  const safePage = currentPage;
+  const paginatedRecords = records;
+  useEffect(() => { if (!loading && data && currentPage > totalPages) setCurrentPage(totalPages); }, [loading, data, currentPage, totalPages]);
 
   // Check if any filters or sorting are active
   const hasActiveFilters =
@@ -199,21 +163,10 @@ export const PaymentPage: React.FC = () => {
   };
 
   // Card Reset action handler (Paid/Settled -> Pending)
-  const handleResetCard = (id: string, e: React.MouseEvent) => {
+  const handleResetCard = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setRecords((prev) => {
-      const next = prev.map((r) => {
-        if (r.id === id) {
-          toast.info("Payment Reset", {
-            description: `Payment status for ${r.student.name} reset to Pending.`,
-          });
-          return { ...r, status: "Pending" as const, cardStatus: "Pending" as const };
-        }
-        return r;
-      });
-      savePaymentRecords(next);
-      return next;
-    });
+    try { await resetPayment(id); toast.success("Payment reset successfully."); }
+    catch (error) { toast.error("Unable to reset payment", { description: apiMessage(error) }); }
   };
 
   // Breadcrumb items based on active view with explicit /payment path
@@ -438,7 +391,7 @@ export const PaymentPage: React.FC = () => {
               whileTap={{ scale: 0.92 }}
               transition={{ type: "spring", stiffness: 400, damping: 20 }}
               type="button"
-              onClick={() => setSelectedRecordForModal(item)}
+              onClick={() => void openLedger(item)}
               className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-gradient-to-r from-brand-red to-burgundy-primary text-white shadow-sm transition-shadow duration-200 hover:shadow-md hover:shadow-brand-red/35"
               title={`View Payment History for ${item.student.name}`}
               aria-label={`View Payment History for ${item.student.name}`}
@@ -451,6 +404,8 @@ export const PaymentPage: React.FC = () => {
     ],
     [sortMethod],
   );
+
+  if (!isHistoryView && ((!data && loading) || error)) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
 
   return (
     <motion.div
@@ -483,10 +438,6 @@ export const PaymentPage: React.FC = () => {
       </motion.div>
 
       {/* Render Payment History Page View when active with smooth transition */}
-      <AnimatePresence
-        mode="wait"
-        initial={false}
-      >
         {currentView === "payment-history" ? (
           <motion.div
             key="payment-history-view"
@@ -495,7 +446,7 @@ export const PaymentPage: React.FC = () => {
             animate="animate"
             exit="exit"
           >
-            <PaymentHistoryView records={records} />
+            <PaymentHistoryView />
           </motion.div>
         ) : (
           /* Render Primary Fee & Commission Payments Table View */
@@ -550,10 +501,12 @@ export const PaymentPage: React.FC = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        toast.success("Payments Exported", {
-                          description: `Exported ${filteredRecords.length} payment records.`,
-                        });
+                      disabled={exporting || loading}
+                      onClick={async () => {
+                        setExporting(true);
+                        try { const count = await exportPayments({ ...JSON.parse(filters), page: 1, limit: 100 }); toast.success(`Exported ${count} payment records.`); }
+                        catch (error) { toast.error("Unable to export payments", { description: apiMessage(error) }); }
+                        finally { setExporting(false); }
                       }}
                       className="group gap-1.5 rounded-xl border-brand-border bg-white text-xs font-semibold text-text-primary transition-all hover:bg-brand-bg hover:text-burgundy-primary"
                       title="Export payments table to spreadsheet"
@@ -901,8 +854,6 @@ export const PaymentPage: React.FC = () => {
             </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>
-
       {/* Payment History View Button Modal */}
       {selectedRecordForModal && (
         <PaymentHistoryModal

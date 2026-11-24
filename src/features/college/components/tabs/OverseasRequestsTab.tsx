@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Search, Mail, Calendar, Eye, Link2, Check, X } from "lucide-react";
-import { initialOverseasRequestsData } from "../../data/collegeTabData";
+import { overseasRequests } from "@/services/ams";
+import { useApiCollection } from "@/hooks/useApiCollection";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { CollegeOverseasRequest } from "../../types";
 import { DataTable, ColumnDef } from "@/components/ui/Table";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -9,7 +11,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { Avatar } from "@/components/ui/Avatar";
 import { OverseasRequestModal } from "../OverseasRequestModal";
 import { toast } from "@/components/common/ToastMessage";
-import { safeStorage } from "@/lib/security";
+
 import { cn } from "@/lib/utils";
 
 export interface OverseasRequestsTabProps {
@@ -19,7 +21,7 @@ export interface OverseasRequestsTabProps {
   onRequestsChange?: (requests: CollegeOverseasRequest[]) => void;
 }
 
-const STORAGE_KEY = "ams_college_overseas_requests_list";
+
 
 export const OVERSEAS_STATUS_CONFIG: Record<CollegeOverseasRequest["status"], { bg: string; text: string; border: string; dot: string }> = {
   "Pending Review": {
@@ -64,37 +66,12 @@ const ALL_STATUS_TABS: ("All" | CollegeOverseasRequest["status"])[] = [
 ];
 
 export const OverseasRequestsTab: React.FC<OverseasRequestsTabProps> = ({
-  requests: externalRequests,
+
   className,
   statusFilter,
-  onRequestsChange,
+
 }) => {
-  // Requests list state with local storage persistence
-  const [requestList, setRequestList] = useState<CollegeOverseasRequest[]>(() => {
-    if (externalRequests && externalRequests.length > 0) return externalRequests;
-    const saved = safeStorage.getItem<CollegeOverseasRequest[]>(STORAGE_KEY, initialOverseasRequestsData);
-    if (Array.isArray(saved) && saved.length > 0) {
-      return saved;
-    }
-    return initialOverseasRequestsData;
-  });
-
-  // Sync when external requests change
-  useEffect(() => {
-    if (externalRequests && externalRequests.length > 0) {
-      setRequestList(externalRequests);
-    }
-  }, [externalRequests]);
-
-  // Persist request updates
-  const saveRequests = useCallback(
-    (newList: CollegeOverseasRequest[]) => {
-      setRequestList(newList);
-      safeStorage.setItem(STORAGE_KEY, newList);
-      onRequestsChange?.(newList);
-    },
-    [onRequestsChange],
-  );
+  const { data: requestList, saveList: saveRequests, loading, error, reload } = useApiCollection(overseasRequests);
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState("");
@@ -134,7 +111,8 @@ export const OverseasRequestsTab: React.FC<OverseasRequestsTabProps> = ({
 
   // Handler to copy public overseas application link
   const handleCopyLink = async () => {
-    const link = `${window.location.origin}/apply/overseas`;
+    const link = import.meta.env.VITE_PUBLIC_APPLICATION_URL;
+    if (!link) { toast.error("The public overseas application URL has not been configured."); return; }
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(link);
@@ -165,9 +143,9 @@ export const OverseasRequestsTab: React.FC<OverseasRequestsTabProps> = ({
 
   // Update status from modal
   const handleUpdateStatus = useCallback(
-    (requestId: string, newStatus: CollegeOverseasRequest["status"]) => {
+    async (requestId: string, newStatus: CollegeOverseasRequest["status"]) => {
       const updated = requestList.map((req) => (req.id === requestId ? { ...req, status: newStatus } : req));
-      saveRequests(updated);
+      if (!await saveRequests(updated)) return false;
       setSelectedRequest((prev) => (prev && prev.id === requestId ? { ...prev, status: newStatus } : prev));
     },
     [requestList, saveRequests],
@@ -347,6 +325,8 @@ export const OverseasRequestsTab: React.FC<OverseasRequestsTabProps> = ({
   );
 
   const hasActiveFilters = Boolean(searchQuery.trim() || activeStatus !== "All");
+
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
 
   return (
     <div className={cn("space-y-4", className)}>

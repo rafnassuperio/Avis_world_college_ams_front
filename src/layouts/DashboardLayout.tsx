@@ -1,3 +1,4 @@
+import { useServerActivity, useServerNotifications } from "@/hooks/useServerActivity";
 import React, { Suspense } from "react";
 import { Outlet, ScrollRestoration } from "react-router-dom";
 import { Sidebar } from "./Sidebar/Sidebar";
@@ -12,6 +13,8 @@ import { useAppStore } from "@/store/useAppStore";
 import { cn } from "@/lib/utils";
 
 export const DashboardLayout: React.FC = () => {
+  useServerActivity();
+  useServerNotifications();
   const sidebarCollapsed = useAppStore((state) => state.sidebarCollapsed);
 
   return (

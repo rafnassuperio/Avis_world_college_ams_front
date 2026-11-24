@@ -1,3 +1,4 @@
+import {useAnimationActivity} from "@/hooks/useAnimationActivity";
 import React, { useEffect, useRef } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import gsap from "gsap";
@@ -17,9 +18,10 @@ export interface StatCardFluidWaveProps {
  * Powered by Framer Motion (continuous SVG path morphing & crest tracking) and GSAP
  * (harmonic levitation physics, micro-droplet ambient drift, and tactile hover surge).
  */
-export const StatCardFluidWave: React.FC<StatCardFluidWaveProps> = ({ id, waveColor, index, isHovered = false, className = "" }) => {
+const StatCardFluidWaveComponent: React.FC<StatCardFluidWaveProps> = ({ id, waveColor, index, isHovered = false, className = "" }) => {
   const shouldReduceMotion = useReducedMotion();
   const svgRef = useRef<SVGSVGElement>(null);
+  const active = useAnimationActivity(svgRef);
   const waveGroupRef = useRef<SVGGElement>(null);
   const crestLineRef = useRef<SVGPathElement>(null);
   const glowRef = useRef<SVGEllipseElement>(null);
@@ -47,7 +49,7 @@ export const StatCardFluidWave: React.FC<StatCardFluidWaveProps> = ({ id, waveCo
 
   // GSAP: Continuous harmonic physics & ambient levitation
   useEffect(() => {
-    if (shouldReduceMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (!active || shouldReduceMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       return;
     }
 
@@ -124,16 +126,17 @@ export const StatCardFluidWave: React.FC<StatCardFluidWaveProps> = ({ id, waveCo
     }, svgRef);
 
     return () => ctx.revert();
-  }, [index, shouldReduceMotion]);
+  }, [index, shouldReduceMotion, active]);
 
   // GSAP: Interactive liquid swell on card hover
   useEffect(() => {
-    if (shouldReduceMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (!active || shouldReduceMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       return;
     }
 
     if (!waveGroupRef.current) return;
 
+    const hoverContext = gsap.context(() => {
     if (isHovered) {
       gsap.to(waveGroupRef.current, {
         y: -5.5,
@@ -185,7 +188,9 @@ export const StatCardFluidWave: React.FC<StatCardFluidWaveProps> = ({ id, waveCo
         });
       }
     }
-  }, [isHovered, shouldReduceMotion]);
+    }, svgRef);
+    return () => hoverContext.revert();
+  }, [isHovered, shouldReduceMotion, active]);
 
   // Animation durations with subtle staggered phase offset per card index
   const bgDuration = 7.4 + (index % 4) * 0.7;
@@ -322,16 +327,17 @@ export const StatCardFluidWave: React.FC<StatCardFluidWaveProps> = ({ id, waveCo
         {/* Layer 1: Background Wave (ambient rolling swell) */}
         <motion.path
           d={bgState0}
+          initial={{ d: bgState0 }}
           animate={
-            shouldReduceMotion
-              ? undefined
+            !active || shouldReduceMotion
+              ? {d: bgState0}
               : {
                   d: [bgState0, bgState1, bgState2, bgState3, bgState0],
                 }
           }
           transition={{
-            duration: bgDuration,
-            repeat: Infinity,
+            duration: active ? bgDuration : 0,
+            repeat: active ? Infinity : 0,
             ease: "easeInOut",
           }}
           fill={`url(#stat-wave-bg-${id})`}
@@ -340,16 +346,17 @@ export const StatCardFluidWave: React.FC<StatCardFluidWaveProps> = ({ id, waveCo
         {/* Layer 2: Foreground Fluid Wave (crisp overlapping liquid flow) */}
         <motion.path
           d={fgState0}
+          initial={{ d: fgState0 }}
           animate={
-            shouldReduceMotion
-              ? undefined
+            !active || shouldReduceMotion
+              ? {d: fgState0}
               : {
                   d: [fgState0, fgState1, fgState2, fgState3, fgState0],
                 }
           }
           transition={{
-            duration: fgDuration,
-            repeat: Infinity,
+            duration: active ? fgDuration : 0,
+            repeat: active ? Infinity : 0,
             ease: "easeInOut",
           }}
           fill={`url(#stat-wave-fg-${id})`}
@@ -359,16 +366,17 @@ export const StatCardFluidWave: React.FC<StatCardFluidWaveProps> = ({ id, waveCo
         <motion.path
           ref={crestLineRef}
           d={crestState0}
+          initial={{ d: crestState0 }}
           animate={
-            shouldReduceMotion
-              ? undefined
+            !active || shouldReduceMotion
+              ? {d: crestState0}
               : {
                   d: [crestState0, crestState1, crestState2, crestState3, crestState0],
                 }
           }
           transition={{
-            duration: fgDuration,
-            repeat: Infinity,
+            duration: active ? fgDuration : 0,
+            repeat: active ? Infinity : 0,
             ease: "easeInOut",
           }}
           fill="none"
@@ -411,3 +419,5 @@ export const StatCardFluidWave: React.FC<StatCardFluidWaveProps> = ({ id, waveCo
     </svg>
   );
 };
+
+export const StatCardFluidWave = React.memo(StatCardFluidWaveComponent);

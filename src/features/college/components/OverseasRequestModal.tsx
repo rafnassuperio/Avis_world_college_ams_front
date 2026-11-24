@@ -23,9 +23,9 @@ import { cn } from "@/lib/utils";
 
 export interface OverseasRequestModalProps {
   isOpen: boolean;
-  onClose: () => void;
+  onClose: () => void | boolean | Promise<void | boolean>;
   request: CollegeOverseasRequest | null;
-  onUpdateStatus?: (requestId: string, newStatus: CollegeOverseasRequest["status"]) => void;
+  onUpdateStatus?: (requestId: string, newStatus: CollegeOverseasRequest["status"]) => void | boolean | Promise<void | boolean>;
 }
 
 const STATUS_OPTIONS: CollegeOverseasRequest["status"][] = [
@@ -92,7 +92,8 @@ export const OverseasRequestModal: React.FC<OverseasRequestModalProps> = ({
   const StatusIcon = currentStatusStyle.icon;
 
   const handleCopyApplicationLink = async () => {
-    const link = `${window.location.origin}/apply/overseas?ref=${request.requestId}`;
+    const link = import.meta.env.VITE_PUBLIC_APPLICATION_URL;
+    if (!link) { toast.error("The public overseas application URL has not been configured."); return; }
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(link);
@@ -128,47 +129,15 @@ export const OverseasRequestModal: React.FC<OverseasRequestModalProps> = ({
     }
   };
 
-  const handleStatusSelect = (newStatus: CollegeOverseasRequest["status"]) => {
+  const handleStatusSelect = async (newStatus: CollegeOverseasRequest["status"]) => {
     if (newStatus === request.status) return;
-    onUpdateStatus?.(request.id, newStatus);
+    if (await onUpdateStatus?.(request.id, newStatus) === false) return;
     toast.success(`Applicant status updated to "${newStatus}"`);
   };
 
-  // Mock standard international document checklist
-  const documentChecklist = [
-    {
-      id: "doc-1",
-      name: "International Passport (Bio & Photo Page)",
-      status: "Verified",
-      detail: `Valid Passport No: ${request.passportNo}`,
-    },
-    {
-      id: "doc-2",
-      name: "Academic Transcripts & High School Certificate",
-      status: request.documentsSubmitted >= 2 ? "Verified" : "Pending",
-      detail: "Certified true copies of senior secondary education",
-    },
-    {
-      id: "doc-3",
-      name: "English Proficiency Score (IELTS / AceTek Test)",
-      status: request.documentsSubmitted >= 3 ? "Verified" : "Pending",
-      detail: "Meets institutional language requirement",
-    },
-    {
-      id: "doc-4",
-      name: "Proof of Financial Capability & Bank Guarantee",
-      status: request.documentsSubmitted >= 4 ? "Verified" : "Under Review",
-      detail: "Tuition and living expense coverage verified",
-    },
-    {
-      id: "doc-5",
-      name: "Medical Examination & Immunization Report",
-      status: request.documentsSubmitted >= 5 ? "Verified" : "Pending",
-      detail: "International student health check clearance",
-    },
-  ];
+  const documentChecklist = request.documents || [];
 
-  const completionPct = Math.round((request.documentsSubmitted / request.documentsTotal) * 100);
+  const completionPct = request.documentsTotal ? Math.round((request.documentsSubmitted / request.documentsTotal) * 100) : 0;
 
   return (
     <Modal

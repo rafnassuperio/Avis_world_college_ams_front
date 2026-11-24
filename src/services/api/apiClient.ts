@@ -1,17 +1,20 @@
+import {cachedQuery, invalidateApiCache, resetApiSession} from "./queryCache";
+import { apiUrl } from "./config";
 import { ApiError } from "./apiError";
 import { useAuthStore } from "@/store/useAuthStore";
 import { toast } from "@/components/common/ToastMessage";
 
 export interface RequestOptions extends RequestInit {
+  responseType?: "json" | "blob";
   timeoutMs?: number;
   skipAuth?: boolean;
   skipCsrf?: boolean;
   deduplicate?: boolean;
+  cacheTimeMs?: number;
   params?: Record<string, string | number | boolean | undefined | null>;
 }
 
-// In-flight active request map for GET query deduplication
-const inFlightRequests = new Map<string, Promise<unknown>>();
+
 
 /**
  * Extracts CSRF token from meta tags or cookies for state-changing requests (POST, PUT, PATCH, DELETE).
@@ -46,29 +49,31 @@ function buildUrlWithParams(baseUrl: string, params?: Record<string, string | nu
 /**
  * Core HTTP Request Execution Engine
  */
-async function executeRequest<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
+async function sendRequest<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const {
     timeoutMs = 15000,
+    responseType = "json",
     skipAuth = false,
     skipCsrf = false,
-    deduplicate = false,
+    deduplicate: _deduplicate,
+    cacheTimeMs: _cacheTimeMs,
+    signal: callerSignal,
     params,
     headers: customHeaders,
     ...fetchOptions
   } = options;
 
-  const resolvedUrl = buildUrlWithParams(endpoint, params);
+  const resolvedUrl = buildUrlWithParams(/^https?:\/\//.test(endpoint) ? endpoint : apiUrl(endpoint), params);
   const method = (fetchOptions.method || "GET").toUpperCase();
 
   // Deduplicate identical in-flight GET requests
-  const deduplicationKey = `${method}:${resolvedUrl}`;
-  if (method === "GET" && deduplicate && inFlightRequests.has(deduplicationKey)) {
-    return inFlightRequests.get(deduplicationKey) as Promise<T>;
-  }
-
-  // Setup abort controller for timeout handling
+  const requestToken = skipAuth ? null : useAuthStore.getState().sessionToken;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const cancel = () => controller.abort();
+  if (callerSignal?.aborted) throw new DOMException("Request cancelled", "AbortError");
+  callerSignal?.addEventListener("abort", cancel, {once: true});
+  const timeoutId = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
 
   // Compile secure default headers
   const headers = new Headers(customHeaders);
@@ -92,7 +97,7 @@ async function executeRequest<T>(endpoint: string, options: RequestOptions = {})
 
   // Attach Bearer token from secure Auth Store
   if (!skipAuth) {
-    const token = useAuthStore.getState().sessionToken;
+    const token = requestToken;
     if (token) {
       headers.set("Authorization", `Bearer ${token}`);
     }
@@ -105,21 +110,21 @@ async function executeRequest<T>(endpoint: string, options: RequestOptions = {})
         method,
         headers,
         signal: controller.signal,
+        credentials: "include",
       });
-
-      clearTimeout(timeoutId);
 
       // Handle HTTP error responses
       if (!response.ok) {
         let errorData: unknown;
         try {
-          errorData = await response.json();
+          const errorText = await response.text();
+          try { errorData = JSON.parse(errorText); } catch { errorData = errorText; }
         } catch {
-          errorData = await response.text();
+          errorData = null;
         }
 
         // Automatic 401 Unauthorized handling: session expiry
-        if (response.status === 401) {
+        if (response.status === 401 && !skipAuth && useAuthStore.getState().sessionToken === requestToken) {
           useAuthStore.getState().logout();
           toast.error("Session Expired", {
             description: "Your administrative session has timed out. Please sign in again.",
@@ -140,9 +145,12 @@ async function executeRequest<T>(endpoint: string, options: RequestOptions = {})
       }
 
       // Parse JSON response
+      if (responseType === "blob") return await response.blob() as T;
       const contentType = response.headers.get("content-type") || "";
       if (contentType.includes("application/json")) {
-        return (await response.json()) as T;
+        const payload = await response.json();
+        if (payload && typeof payload === "object" && payload.success === false) throw new ApiError("The server rejected the operation", { status: 422, data: payload, url: resolvedUrl });
+        return payload as T;
       }
 
       return (await response.text()) as unknown as T;
@@ -153,8 +161,9 @@ async function executeRequest<T>(endpoint: string, options: RequestOptions = {})
         throw err;
       }
 
-      // Handle fetch timeout (AbortError)
-      if (err instanceof DOMException && err.name === "AbortError") {
+      if (callerSignal?.aborted && !timedOut) throw new DOMException("Request cancelled", "AbortError");
+      // A timeout remains a visible failure; ordinary cancellation is silent.
+      if (timedOut) {
         throw new ApiError("Request timeout exceeded", {
           status: 408,
           statusText: "Request Timeout",
@@ -172,17 +181,33 @@ async function executeRequest<T>(endpoint: string, options: RequestOptions = {})
         url: resolvedUrl,
       });
     } finally {
-      if (method === "GET" && deduplicate) {
-        inFlightRequests.delete(deduplicationKey);
-      }
+      clearTimeout(timeoutId);
+      callerSignal?.removeEventListener("abort", cancel);
     }
   })();
 
-  if (method === "GET" && deduplicate) {
-    inFlightRequests.set(deduplicationKey, executionPromise);
-  }
-
   return executionPromise;
+}
+
+async function executeRequest<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
+  const token = useAuthStore.getState().sessionToken;
+  resetApiSession(token);
+  const method = (options.method || "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD") {
+    invalidateApiCache();
+    try { const result = await sendRequest<T>(endpoint, options); invalidateApiCache(true); return result; }
+    catch (error) { invalidateApiCache(); throw error; }
+  }
+  // Cache only opted-in JSON reads; downloads, auth and custom-header reads stay fresh.
+  if (method === "GET" && token && options.deduplicate && !options.skipAuth && !options.headers && options.responseType !== "blob") {
+    const url = new URL(buildUrlWithParams(/^https?:\/\//.test(endpoint) ? endpoint : apiUrl(endpoint), options.params));
+    url.searchParams.sort();
+    const expiry = useAuthStore.getState().sessionExpiry;
+    const ttl = Math.min(options.cacheTimeMs ?? 10000, expiry ? Math.max(0, expiry - Date.now()) : 30000);
+    const key = token + ":" + url.toString() + ":" + ttl + ":" + (options.timeoutMs ?? 15000);
+    return cachedQuery(key, signal => sendRequest<T>(endpoint, {...options, signal}), {signal: options.signal, ttl});
+  }
+  return sendRequest<T>(endpoint, options);
 }
 
 /**
@@ -198,7 +223,7 @@ export const apiClient = {
     return executeRequest<T>(url, {
       ...options,
       method: "POST",
-      body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
+      body: body instanceof FormData ? body : body !== undefined ? JSON.stringify(body) : undefined,
     });
   },
 
@@ -206,7 +231,7 @@ export const apiClient = {
     return executeRequest<T>(url, {
       ...options,
       method: "PUT",
-      body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
+      body: body instanceof FormData ? body : body !== undefined ? JSON.stringify(body) : undefined,
     });
   },
 
@@ -214,7 +239,7 @@ export const apiClient = {
     return executeRequest<T>(url, {
       ...options,
       method: "PATCH",
-      body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
+      body: body instanceof FormData ? body : body !== undefined ? JSON.stringify(body) : undefined,
     });
   },
 

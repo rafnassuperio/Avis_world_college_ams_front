@@ -9,7 +9,7 @@ import countriesData from "@/data/country.json";
 export interface AddRepresentativeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (newRep: RepresentativeItem) => void;
+  onAdd: (newRep: RepresentativeItem) => void | boolean | Promise<void | boolean>;
   nextRepCode?: string;
 }
 
@@ -75,7 +75,7 @@ export const AddRepresentativeModal: React.FC<AddRepresentativeModalProps> = ({
     setError("");
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       setError("Please enter the representative's Full Name.");
@@ -110,7 +110,7 @@ export const AddRepresentativeModal: React.FC<AddRepresentativeModalProps> = ({
       joinedDate: todayStr,
     };
 
-    onAdd(newRep);
+    if (await onAdd(newRep) === false) return;
     handleReset();
     onClose();
   };

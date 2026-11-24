@@ -1,6 +1,8 @@
 import React, { useRef, useEffect } from "react";
 import { Calendar as CalendarIcon, Clock, MapPin, ArrowRight, Sparkles } from "lucide-react";
-import { calendarEvents } from "@/data/mockData";
+import { apiClient } from "@/services/api/apiClient";
+import { rowsOf } from "@/services/ams";
+import { useApiQuery } from "@/hooks/useApiQuery";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import { format } from "date-fns";
 
@@ -56,6 +58,8 @@ export const CalendarDropdown: React.FC<CalendarDropdownProps> = ({
   isOpen,
   onClose,
 }) => {
+  const { data: events } = useApiQuery(async () => isOpen ? rowsOf(await apiClient.get("/sms-api/admin/calendar/get-all-event")) : [], [isOpen]);
+  const calendarEvents = (events || []).map(event => ({ id: event._id, title: event.title || "", date: event.startDate ? String(event.startDate).slice(0, 10) : "", time: event.startTime || "", location: event.location || "" }));
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

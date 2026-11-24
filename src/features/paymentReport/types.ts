@@ -2,6 +2,9 @@ export type PaymentReportTabId = "payment-report" | "cp-case-report";
 export type PaymentSubTabId = "payment-report-sub" | "agent-rep-report";
 
 export interface PaymentReportRecord {
+  paymentId?: string;
+  agentId?: string;
+  repId?: string;
   id: string;
   receiptNo: string;
   date: string;

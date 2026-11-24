@@ -11,7 +11,9 @@ import {
 } from 'recharts';
 import { TrendingUp } from 'lucide-react';
 import { Dropdown } from '@/components/ui/Dropdown';
-import { instituteSalesData } from '@/data/mockData';
+import { useAnalytics, monthsForFilter } from "@/services/analytics";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
+
 import { useAppStore } from '@/store/useAppStore';
 
 interface CustomTooltipProps {
@@ -21,7 +23,8 @@ interface CustomTooltipProps {
     payload: {
       month: string;
       sales: number;
-      target: number;
+      target?: number;
+      currency?: string;
       growth: string;
     };
   }>;
@@ -30,14 +33,14 @@ interface CustomTooltipProps {
 const CustomChartTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
-    const isAboveTarget = data.sales >= data.target;
+    const isAboveTarget = data.target !== undefined && data.sales >= data.target;
 
     return (
       <div className="bg-white/95 backdrop-blur-md px-3.5 py-2.5 rounded-2xl border border-brand-border shadow-[0_8px_24px_-4px_rgba(112,43,64,0.18)] text-left select-none pointer-events-none min-w-[155px] sm:min-w-[170px] z-50">
         {/* Month Header */}
         <div className="flex items-center justify-between border-b border-brand-border/60 pb-1.5 mb-2">
           <p className="text-[11px] font-bold text-text-primary tracking-wide">
-            {data.month} 2026
+            {data.month}
           </p>
           <span className="inline-flex items-center text-[10px] font-bold text-success bg-success-light px-1.5 py-0.5 rounded-md leading-none">
             {data.growth}
@@ -52,7 +55,7 @@ const CustomChartTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) =
               Institute Sales:
             </span>
             <span className="text-xs font-extrabold text-brand-red">
-              ₹ {data.sales.toFixed(1)}L
+              {data.currency} {data.sales.toFixed(1)}L
             </span>
           </div>
 
@@ -63,7 +66,7 @@ const CustomChartTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) =
               Sales Quota:
             </span>
             <span className="text-[11px] font-bold text-text-secondary">
-              ₹ {data.target.toFixed(1)}L
+              {data.target == null ? "—" : data.currency + " " + data.target.toFixed(1) + "L"}
             </span>
           </div>
 
@@ -75,7 +78,7 @@ const CustomChartTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) =
                   : 'bg-amber-50 text-amber-700'
                 }`}
             >
-              {isAboveTarget ? '✓ Target Surpassed' : '● Near Target'}
+              {data.target == null ? 'Not configured' : isAboveTarget ? '✓ Target Surpassed' : '● Near Target'}
             </span>
           </div>
         </div>
@@ -101,31 +104,16 @@ const InstitutionOverviewComponent: React.FC = () => {
     setOverviewFilter(val as 'This Year' | 'Last Year' | 'All Time');
   };
 
-  // Scaled data based on filter selection
-  const chartData = instituteSalesData.map((d) => {
-    if (dataFilter === 'Last Year') {
-      return {
-        ...d,
-        sales: Number((d.sales * 0.82).toFixed(1)),
-        target: Number((d.target * 0.82).toFixed(1)),
-      };
-    }
-    if (dataFilter === 'All Time') {
-      return {
-        ...d,
-        sales: Number((d.sales * 1.15).toFixed(1)),
-        target: Number((d.target * 1.12).toFixed(1)),
-      };
-    }
-    return d;
-  });
-
+  const { data, loading, error, reload } = useAnalytics();
+  const chartData = monthsForFilter(data?.monthly || [], dataFilter).map(m => ({ month: m.month, sales: m.sales / 100000, target: undefined, currency: data?.currency, admissions: m.students, students: m.students, growth: "—" }));
   const peakMonth = chartData.reduce(
     (max, curr) => (curr.sales > max.sales ? curr : max),
-    chartData[0]
+    chartData[0] || { month: "—", sales: 0, target: 0, admissions: 0, students: 0, growth: "—" }
   );
 
   const peakSalesValue = peakMonth.sales;
+
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
 
   return (
     <div className="h-full bg-white rounded-[22px] p-4 sm:p-6 border border-brand-border shadow-[0_2px_10px_-2px_rgba(87,0,31,0.03)] hover:shadow-[0_8px_24px_-4px_rgba(87,0,31,0.06)] transition-all duration-300 flex flex-col justify-between">
@@ -157,7 +145,7 @@ const InstitutionOverviewComponent: React.FC = () => {
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-brand-red inline-block" />
             <span className="text-[11px] font-semibold text-text-primary">
-              Sales: <span className="font-extrabold text-brand-red">₹ {peakSalesValue.toFixed(1)}L</span>
+              Sales: <span className="font-extrabold text-brand-red">{data?.currency} {peakSalesValue.toFixed(1)}L</span>
             </span>
           </div>
           <span className="text-text-muted text-[10px]">•</span>
@@ -204,9 +192,8 @@ const InstitutionOverviewComponent: React.FC = () => {
               axisLine={false}
               tickLine={false}
               tick={{ fill: 'var(--text-secondary)', fontSize: 10 }}
-              domain={[0, 100]}
-              ticks={[0, 20, 40, 60, 80, 100]}
-              tickFormatter={(val) => (val === 0 ? '₹0' : `₹${val}L`)}
+              domain={[0, "auto"]}
+              tickFormatter={(val) => `${data?.currency || ""} ${val}L`}
               width={38}
             />
 

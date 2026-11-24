@@ -1,10 +1,11 @@
+import { useAdmissionOptions } from "@/hooks/useAdmissionOptions";
 import React, { useState, useMemo, useRef } from "react";
 import { User, GraduationCap, CreditCard, Phone, Save, FileText, Mail, Calendar, Camera, Building, Upload, Trash2, AlertCircle } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
 import { FilterSelect, FilterSelectOption } from "@/components/ui/FilterSelect";
-import { COURSE_TYPES, COURSE_CATALOG, PAYMENT_SCHEMES, INTAKE_MONTHS, AGENTS_LIST, REPRESENTATIVES_LIST } from "../AddStudentModal";
+import { COURSE_TYPES, INTAKE_MONTHS } from "../AddStudentModal";
 import countryData from "@/data/country.json";
 import { CollegeStudent } from "../../types";
 import { toast } from "@/components/common/ToastMessage";
@@ -97,7 +98,7 @@ export interface EditStudentModalProps {
   isOpen: boolean;
   onClose: () => void;
   student: CollegeStudent;
-  onSave: (updatedStudent: CollegeStudent) => void;
+  onSave: (updatedStudent: CollegeStudent) => void | boolean | Promise<void | boolean>;
 }
 
 type EditTab = "personal" | "academic" | "passes" | "contact" | "financial";
@@ -105,6 +106,7 @@ type EditTab = "personal" | "academic" | "passes" | "contact" | "financial";
 export const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onClose, student, onSave }) => {
   const [activeTab, setActiveTab] = useState<EditTab>("personal");
   const [formData, setFormData] = useState<CollegeStudent>({ ...student });
+  const { COURSE_CATALOG, AGENTS_LIST, REPRESENTATIVES_LIST, paymentSchemeOptions: schemeOptions } = useAdmissionOptions(formData.course);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [imageError, setImageError] = useState<string>("");
 
@@ -167,15 +169,15 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onCl
       list.unshift({ label: formData.course, value: formData.course, subLabel: "Current enrolled course" });
     }
     return list;
-  }, [formData.course]);
+  }, [formData.course, COURSE_CATALOG]);
 
   const paymentSchemeOptions = useMemo(() => {
-    const list: FilterSelectOption[] = PAYMENT_SCHEMES.map((scheme) => ({ label: scheme, value: scheme }));
+    const list: FilterSelectOption[] = schemeOptions;
     if (formData.coursePaymentScheme && !list.some((s) => s.value.toLowerCase() === (formData.coursePaymentScheme || "").toLowerCase())) {
       list.unshift({ label: formData.coursePaymentScheme, value: formData.coursePaymentScheme });
     }
     return list;
-  }, [formData.coursePaymentScheme]);
+  }, [formData.coursePaymentScheme, schemeOptions]);
 
   const intakeMonthOptions = useMemo(() => {
     return INTAKE_MONTHS.map((m) => ({ label: m, value: m }));
@@ -188,12 +190,12 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onCl
       list.unshift({ label: rep, value: rep });
     }
     return list;
-  }, [formData.representative]);
+  }, [formData.representative, REPRESENTATIVES_LIST]);
 
   const agentOptions = useMemo(() => {
     const list: FilterSelectOption[] = [
       { label: "Direct / No Agent", value: "Direct / No Agent" },
-      { label: "TEMP AGENT", value: "TEMP AGENT" },
+
       ...AGENTS_LIST.map((ag) => ({ label: ag, value: ag })),
     ];
     const ag = formData.agent;
@@ -201,7 +203,7 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onCl
       list.unshift({ label: ag, value: ag });
     }
     return list;
-  }, [formData.agent]);
+  }, [formData.agent, AGENTS_LIST]);
 
   const nationalityOptions = useMemo(() => {
     const list: FilterSelectOption[] = (countryData as CountryItem[]).map((c) => ({
@@ -229,7 +231,7 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onCl
     return list;
   }, [formData.country]);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name?.trim()) {
       toast.error("Student name cannot be empty");
@@ -251,7 +253,7 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onCl
       editedAt: nowFormatted,
     };
 
-    onSave(finalStudent);
+    if (await onSave(finalStudent) === false) return;
     toast.success("Student profile updated successfully");
     onClose();
   };

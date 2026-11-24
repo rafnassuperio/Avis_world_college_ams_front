@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import { useSearchParams, useLocation } from "react-router-dom";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import { useAppStore } from "@/store/useAppStore";
@@ -11,7 +11,13 @@ import { dashboardContainerVariants, dashboardSectionVariants } from "@/componen
 import { Building, ShieldCheck, Edit3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
-import { getAdminsRoster, saveAdminsRoster } from "@/features/admins/data/mockAdminsData";
+import { getProfile, profileOf, saveProfile } from "@/services/profile";
+import { apiMessage } from "@/services/ams";
+import { useApiQuery } from "@/hooks/useApiQuery";
+import { useAuthStore } from "@/store/useAuthStore";
+import { session } from "@/services/api/session";
+import { toast } from "@/components/common/ToastMessage";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { AdminRosterItem } from "@/features/admins/types";
 import { UserProfile } from "@/types";
 
@@ -41,40 +47,17 @@ export const AdminProfilePage: React.FC = () => {
 
   const adminProfile = useAppStore((state) => state.adminProfile);
   const updateAdminProfile = useAppStore((state) => state.updateAdminProfile);
-  const resetAdminProfile = useAppStore((state) => state.resetAdminProfile);
+
 
   // Check if viewing a specific admin from TotalAdminsPage
   const adminIdParam = searchParams.get("id") || searchParams.get("adminId");
   const passedAdmin = location.state?.admin as AdminRosterItem | undefined;
+  const ownId = useAuthStore(state => state.adminId);
+  const profileId = adminIdParam || passedAdmin?.id || ownId || "";
+  const { data, loading, error, reload } = useApiQuery(() => getProfile(profileId), [profileId]);
 
-  const currentRosterAdmin = useMemo<AdminRosterItem | null>(() => {
-    if (passedAdmin) return passedAdmin;
-    if (adminIdParam) {
-      const roster = getAdminsRoster();
-      return roster.find((a) => a.id === adminIdParam || a.employeeId === adminIdParam) || null;
-    }
-    return null;
-  }, [adminIdParam, passedAdmin]);
-
-  const displayedUser: UserProfile = useMemo(() => {
-    if (!currentRosterAdmin) return adminProfile;
-    return {
-      name: currentRosterAdmin.name,
-      role: currentRosterAdmin.role,
-      email: currentRosterAdmin.email,
-      avatarUrl: currentRosterAdmin.avatarUrl || "/avis-emblem.png",
-      college: "Avis World College",
-      amsVersion: adminProfile.amsVersion || "v2.4.0",
-      city: currentRosterAdmin.city || currentRosterAdmin.location,
-      state: currentRosterAdmin.state || "",
-      country: currentRosterAdmin.country || "India",
-      phone: currentRosterAdmin.phone,
-      bio: currentRosterAdmin.bio || `Administrator assigned to ${currentRosterAdmin.department}.`,
-      department: currentRosterAdmin.department,
-      joinedDate: currentRosterAdmin.joinedDate,
-      status: currentRosterAdmin.status,
-    };
-  }, [currentRosterAdmin, adminProfile]);
+  const currentRosterAdmin = adminIdParam || passedAdmin ? data?.admin : null;
+  const displayedUser = data ? profileOf(data.admin) : adminProfile;
 
   const handleTabChange = (tabId: ProfileTabId) => {
     setActiveTab(tabId);
@@ -85,34 +68,26 @@ export const AdminProfilePage: React.FC = () => {
     setSearchParams(newParams, { replace: true });
   };
 
-  const handleSaveProfile = (updated: Partial<UserProfile>) => {
-    if (currentRosterAdmin) {
-      const roster = getAdminsRoster();
-      const updatedRoster = roster.map((adm) => {
-        if (adm.id === currentRosterAdmin.id) {
-          return {
-            ...adm,
-            name: updated.name ?? adm.name,
-            email: updated.email ?? adm.email,
-            phone: updated.phone ?? adm.phone,
-            department: updated.department ?? adm.department,
-            country: updated.country ?? adm.country,
-            location: updated.city ?? adm.location,
-            bio: updated.bio ?? adm.bio,
-            role: updated.role ?? adm.role,
-          };
-        }
-        return adm;
-      });
-      saveAdminsRoster(updatedRoster);
-    }
-    updateAdminProfile(updated);
+  const handleSaveProfile = async (updated: Partial<UserProfile> & { currentPassword?: string }) => {
+    try {
+      const response = await saveProfile(profileId, { ...displayedUser, ...updated });
+      if (profileId === ownId) {
+        const next = profileOf(response.admin);
+        updateAdminProfile(next);
+        const token = useAuthStore.getState().sessionToken;
+        if (token) session.save(token, next);
+        useAuthStore.setState({ user: next });
+      }
+      await reload();
+    } catch (error) { toast.error("Unable to save profile", { description: apiMessage(error) }); return false; }
   };
 
   const tabs = [
     { id: "overview" as const, label: "Profile Overview", icon: Building },
     { id: "permissions" as const, label: "Access Roles", icon: ShieldCheck },
   ];
+
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
 
   return (
     <motion.div
@@ -218,7 +193,7 @@ export const AdminProfilePage: React.FC = () => {
                 user={displayedUser}
                 onEditClick={() => setIsEditModalOpen(true)}
               />
-              <AccessRolesSection />
+              <AccessRolesSection adminId={profileId} />
             </motion.div>
           )}
 
@@ -230,7 +205,7 @@ export const AdminProfilePage: React.FC = () => {
               exit={{ opacity: 0, y: -10, filter: "blur(4px)" }}
               transition={iosContentTransition}
             >
-              <AccessRolesSection />
+              <AccessRolesSection adminId={profileId} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -242,7 +217,7 @@ export const AdminProfilePage: React.FC = () => {
         onClose={() => setIsEditModalOpen(false)}
         user={displayedUser}
         onSave={handleSaveProfile}
-        onResetDefaults={() => resetAdminProfile()}
+        onResetDefaults={() => { void reload(); }}
       />
     </motion.div>
   );

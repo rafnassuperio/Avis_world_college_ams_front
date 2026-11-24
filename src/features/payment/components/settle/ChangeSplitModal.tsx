@@ -10,7 +10,7 @@ export interface ChangeSplitModalProps {
   onClose: () => void;
   initialAgentShare: number;
   initialRepShare: number;
-  onApplySplit: (agentShare: number, repShare: number, syncWithPaymentDetails: boolean) => void;
+  onApplySplit: (agentShare: number, repShare: number, syncWithPaymentDetails: boolean) => void | boolean | Promise<void | boolean>;
 }
 
 export const ChangeSplitModal: React.FC<ChangeSplitModalProps> = ({
@@ -43,14 +43,14 @@ export const ChangeSplitModal: React.FC<ChangeSplitModalProps> = ({
   const currentRep = parseFloat(modalRepShare.replace(/,/g, "")) || 0;
   const currentCombinedTotal = currentAgent + currentRep;
 
-  const handleApplyPresetSplit = (agentPct: number, total: number = 1880.0) => {
+  const handleApplyPresetSplit = (agentPct: number, total: number = initialAgentShare + initialRepShare) => {
     const calculatedAgent = (total * agentPct) / 100;
     const calculatedRep = total - calculatedAgent;
     setModalAgentShare(calculatedAgent.toFixed(2));
     setModalRepShare(calculatedRep.toFixed(2));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (currentAgent < 0 || currentRep < 0) {
       toast.error("Invalid Split Amount", {
         description: "Commission shares cannot be negative numbers.",
@@ -58,7 +58,7 @@ export const ChangeSplitModal: React.FC<ChangeSplitModalProps> = ({
       return;
     }
 
-    onApplySplit(currentAgent, currentRep, syncWithPaymentDetails);
+    if (await onApplySplit(currentAgent, currentRep, syncWithPaymentDetails) === false) return;
     onClose();
   };
 

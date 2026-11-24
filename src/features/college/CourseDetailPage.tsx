@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import {
@@ -21,13 +21,16 @@ import { Button } from "@/components/ui/Button";
 import { DeleteModal } from "@/components/ui/DeleteModal";
 import { FilterSelect } from "@/components/ui/FilterSelect";
 import { AddFeeTypeModal, AddRequirementModal } from "./components";
-import { initialCoursesData, defaultCourseRequirements, defaultCourseFeeSchemes } from "./data/collegeTabData";
-import { CollegeCourse, CourseRequirement, CourseFeeBreakdown } from "./types";
-import { safeStorage } from "@/lib/security";
+import { courses, apiMessage } from "@/services/ams";
+import { apiClient } from "@/services/api/apiClient";
+import { useApiCollection } from "@/hooks/useApiCollection";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
+import { CourseRequirement, CourseFeeBreakdown } from "./types";
+
 import { toast } from "@/components/common/ToastMessage";
 import { dashboardContainerVariants, dashboardSectionVariants } from "@/components/animations/transitions";
 
-const STORAGE_KEY = "ams_college_courses_list";
+
 
 export const CourseDetailPage: React.FC = () => {
   const { courseId } = useParams<{ courseId: string }>();
@@ -35,9 +38,7 @@ export const CourseDetailPage: React.FC = () => {
   const shouldReduceMotion = useReducedMotion();
 
   // Load all courses from storage
-  const [coursesList, setCoursesList] = useState<CollegeCourse[]>(() => {
-    return safeStorage.getItem<CollegeCourse[]>(STORAGE_KEY, initialCoursesData);
-  });
+  const { data: coursesList, loading, error, reload } = useApiCollection(courses);
 
   // Find targeted course
   const currentCourse = useMemo(() => {
@@ -51,7 +52,7 @@ export const CourseDetailPage: React.FC = () => {
     if (currentCourse?.requirements && currentCourse.requirements.length > 0) {
       return currentCourse.requirements;
     }
-    return defaultCourseRequirements;
+    return [];
   });
 
   // Fee schemes state
@@ -59,7 +60,7 @@ export const CourseDetailPage: React.FC = () => {
     if (currentCourse?.feeBreakdownSchemes && currentCourse.feeBreakdownSchemes.length > 0) {
       return currentCourse.feeBreakdownSchemes;
     }
-    return defaultCourseFeeSchemes;
+    return [];
   });
 
   // Selected Fee Scheme ID
@@ -67,12 +68,12 @@ export const CourseDetailPage: React.FC = () => {
     if (currentCourse?.feeBreakdownSchemes && currentCourse.feeBreakdownSchemes.length > 0) {
       return currentCourse.feeBreakdownSchemes[0].id;
     }
-    return defaultCourseFeeSchemes[0].id;
+    return "";
   });
 
   // Active Fee Scheme
   const activeScheme = useMemo(() => {
-    return feeSchemes.find((s) => s.id === selectedSchemeId) || feeSchemes[0] || defaultCourseFeeSchemes[0];
+    return feeSchemes.find((s) => s.id === selectedSchemeId) || feeSchemes[0] || { id: "", name: "", schemeCode: "", tuitionFee: 0, medicalInsurance: 0, resourceFee: 0, assessmentFee: 0, feeProtection: 0, uniformFee: 0, adminFee: 0, gstRate: 0 };
   }, [feeSchemes, selectedSchemeId]);
 
   // Modal states
@@ -80,17 +81,27 @@ export const CourseDetailPage: React.FC = () => {
   const [isDeleteFeeTypeModalOpen, setIsDeleteFeeTypeModalOpen] = useState(false);
   const [isAddRequirementModalOpen, setIsAddRequirementModalOpen] = useState(false);
 
-  // Persist course changes helper
-  const persistCourseData = (updatedRequirements: CourseRequirement[], updatedSchemes: CourseFeeBreakdown[]) => {
-    if (!currentCourse) return;
-    const updatedCourse: CollegeCourse = {
-      ...currentCourse,
-      requirements: updatedRequirements,
-      feeBreakdownSchemes: updatedSchemes,
-    };
-    const updatedList = coursesList.map((c) => (c.id === updatedCourse.id ? updatedCourse : c));
-    setCoursesList(updatedList);
-    safeStorage.setItem(STORAGE_KEY, updatedList);
+  useEffect(() => {
+    setRequirements(currentCourse?.requirements || []);
+    setFeeSchemes(currentCourse?.feeBreakdownSchemes || []);
+    setSelectedSchemeId(previous => currentCourse?.feeBreakdownSchemes?.some(s => s.id === previous) ? previous : currentCourse?.feeBreakdownSchemes?.[0]?.id || "");
+  }, [currentCourse]);
+  const persistCourseData = async (updatedRequirements: CourseRequirement[], updatedSchemes: CourseFeeBreakdown[]) => {
+    if (!currentCourse) return false;
+    try {
+      if (JSON.stringify(updatedRequirements) !== JSON.stringify(currentCourse.requirements || [])) await apiClient.put(`/api/admin/edit-courses/${currentCourse.id}`, { requirements: updatedRequirements });
+      const previous = currentCourse.feeBreakdownSchemes || [];
+      for (const scheme of updatedSchemes) {
+        const old = previous.find(s => s.id === scheme.id);
+        if (JSON.stringify(old) === JSON.stringify(scheme)) continue;
+        const subtotal = scheme.tuitionFee + scheme.medicalInsurance + scheme.resourceFee + scheme.assessmentFee + scheme.feeProtection + scheme.uniformFee + scheme.adminFee - (scheme.discount || 0);
+        const body = { ...scheme, gst: Number((subtotal * (scheme.gstRate || 0)).toFixed(2)), totalFee: Number((subtotal * (1 + (scheme.gstRate || 0))).toFixed(2)) };
+        if (old) await apiClient.put(`/api/admin/edit-courses-feeType/${currentCourse.id}/fees/${scheme.id}`, body);
+        else await apiClient.post(`/api/admin/courses/${currentCourse.id}/fees`, body);
+      }
+      for (const scheme of previous) if (!updatedSchemes.some(s => s.id === scheme.id)) await apiClient.delete(`/api/admin/delete-courses-feeType/${currentCourse.id}/fees/${scheme.id}`);
+      await reload(); return true;
+    } catch (error) { toast.error("Unable to save course", { description: apiMessage(error) }); await reload(); return false; }
   };
 
   // Live recalculate subtotal, GST (9%), and total payable for active scheme
@@ -103,7 +114,7 @@ export const CourseDetailPage: React.FC = () => {
       Number(activeScheme.assessmentFee || 0) +
       Number(activeScheme.feeProtection || 0) +
       Number(activeScheme.uniformFee || 0) +
-      Number(activeScheme.adminFee || 0)
+      Number(activeScheme.adminFee || 0) - Number(activeScheme.discount || 0)
     );
   }, [activeScheme]);
 
@@ -132,12 +143,13 @@ export const CourseDetailPage: React.FC = () => {
     });
 
     setFeeSchemes(updatedSchemes);
-    persistCourseData(requirements, updatedSchemes);
+
   };
 
   // Add new fee scheme
-  const handleAddFeeScheme = (newScheme: CourseFeeBreakdown) => {
+  const handleAddFeeScheme = async (newScheme: CourseFeeBreakdown) => {
     const updatedSchemes = [...feeSchemes, newScheme];
+    if (!await persistCourseData(requirements, updatedSchemes)) return false;
     setFeeSchemes(updatedSchemes);
     setSelectedSchemeId(newScheme.id);
     persistCourseData(requirements, updatedSchemes);
@@ -145,7 +157,7 @@ export const CourseDetailPage: React.FC = () => {
   };
 
   // Delete active fee type
-  const handleDeleteActiveFeeType = () => {
+  const handleDeleteActiveFeeType = async () => {
     if (feeSchemes.length <= 1) {
       toast.error("At least one fee type scheme is required.");
       setIsDeleteFeeTypeModalOpen(false);
@@ -156,24 +168,25 @@ export const CourseDetailPage: React.FC = () => {
     const targetName = activeScheme.name;
     const remainingSchemes = feeSchemes.filter((s) => s.id !== targetId);
 
+    if (!await persistCourseData(requirements, remainingSchemes)) return false;
     setFeeSchemes(remainingSchemes);
     setSelectedSchemeId(remainingSchemes[0].id);
-    persistCourseData(requirements, remainingSchemes);
+
     setIsDeleteFeeTypeModalOpen(false);
 
     toast.success(`Fee type "${targetName}" removed.`);
   };
 
   // Add requirement
-  const handleAddRequirement = (description: string) => {
+  const handleAddRequirement = async (description: string) => {
     const newReq: CourseRequirement = {
       id: `req-${Date.now()}`,
       description,
     };
 
     const updated = [...requirements, newReq];
+    if (!await persistCourseData(updated, feeSchemes)) return false;
     setRequirements(updated);
-    persistCourseData(updated, feeSchemes);
     toast.success("New requirement added.");
   };
 
@@ -181,6 +194,7 @@ export const CourseDetailPage: React.FC = () => {
 
   const sectionVariants = shouldReduceMotion ? { hidden: { opacity: 1 }, visible: { opacity: 1 } } : dashboardSectionVariants;
 
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
   if (!currentCourse) {
     return (
       <div className="mx-auto w-full max-w-4xl space-y-4 pt-4">
@@ -209,9 +223,9 @@ export const CourseDetailPage: React.FC = () => {
   const breadcrumbParts = [{ name: "College", path: "/college" }, { name: "Courses", path: "/college" }, { name: currentCourse.code }];
 
   const durationDisplay =
-    currentCourse.durationDetail || currentCourse.duration || "12 months (6 months of institutional training + 6 months of industrial attachment)";
+    currentCourse.durationDetail || currentCourse.duration || "—";
 
-  const applicationFeesDisplay = currentCourse.applicationFee || "109";
+  const applicationFeesDisplay = currentCourse.applicationFee || "—";
 
   return (
     <motion.div
@@ -491,6 +505,7 @@ export const CourseDetailPage: React.FC = () => {
                           min={0}
                           value={activeScheme.tuitionFee}
                           onChange={(e) => handleFeeAmountChange("tuitionFee", e.target.value)}
+                          onBlur={() => { void persistCourseData(requirements, feeSchemes); }}
                           className="w-28 rounded-lg border border-brand-border bg-brand-bg/40 px-2.5 py-1 text-right font-mono text-xs font-semibold text-text-primary transition-all focus:border-burgundy-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-burgundy-primary"
                         />
                       </div>
@@ -508,6 +523,7 @@ export const CourseDetailPage: React.FC = () => {
                           min={0}
                           value={activeScheme.medicalInsurance}
                           onChange={(e) => handleFeeAmountChange("medicalInsurance", e.target.value)}
+                          onBlur={() => { void persistCourseData(requirements, feeSchemes); }}
                           className="w-28 rounded-lg border border-brand-border bg-brand-bg/40 px-2.5 py-1 text-right font-mono text-xs font-semibold text-text-primary transition-all focus:border-burgundy-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-burgundy-primary"
                         />
                       </div>
@@ -525,6 +541,7 @@ export const CourseDetailPage: React.FC = () => {
                           min={0}
                           value={activeScheme.resourceFee}
                           onChange={(e) => handleFeeAmountChange("resourceFee", e.target.value)}
+                          onBlur={() => { void persistCourseData(requirements, feeSchemes); }}
                           className="w-28 rounded-lg border border-brand-border bg-brand-bg/40 px-2.5 py-1 text-right font-mono text-xs font-semibold text-text-primary transition-all focus:border-burgundy-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-burgundy-primary"
                         />
                       </div>
@@ -542,6 +559,7 @@ export const CourseDetailPage: React.FC = () => {
                           min={0}
                           value={activeScheme.assessmentFee}
                           onChange={(e) => handleFeeAmountChange("assessmentFee", e.target.value)}
+                          onBlur={() => { void persistCourseData(requirements, feeSchemes); }}
                           className="w-28 rounded-lg border border-brand-border bg-brand-bg/40 px-2.5 py-1 text-right font-mono text-xs font-semibold text-text-primary transition-all focus:border-burgundy-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-burgundy-primary"
                         />
                       </div>
@@ -559,6 +577,7 @@ export const CourseDetailPage: React.FC = () => {
                           min={0}
                           value={activeScheme.feeProtection}
                           onChange={(e) => handleFeeAmountChange("feeProtection", e.target.value)}
+                          onBlur={() => { void persistCourseData(requirements, feeSchemes); }}
                           className="w-28 rounded-lg border border-brand-border bg-brand-bg/40 px-2.5 py-1 text-right font-mono text-xs font-semibold text-text-primary transition-all focus:border-burgundy-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-burgundy-primary"
                         />
                       </div>
@@ -576,6 +595,7 @@ export const CourseDetailPage: React.FC = () => {
                           min={0}
                           value={activeScheme.uniformFee}
                           onChange={(e) => handleFeeAmountChange("uniformFee", e.target.value)}
+                          onBlur={() => { void persistCourseData(requirements, feeSchemes); }}
                           className="w-28 rounded-lg border border-brand-border bg-brand-bg/40 px-2.5 py-1 text-right font-mono text-xs font-semibold text-text-primary transition-all focus:border-burgundy-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-burgundy-primary"
                         />
                       </div>
@@ -593,6 +613,7 @@ export const CourseDetailPage: React.FC = () => {
                           min={0}
                           value={activeScheme.adminFee}
                           onChange={(e) => handleFeeAmountChange("adminFee", e.target.value)}
+                          onBlur={() => { void persistCourseData(requirements, feeSchemes); }}
                           className="w-28 rounded-lg border border-brand-border bg-brand-bg/40 px-2.5 py-1 text-right font-mono text-xs font-semibold text-text-primary transition-all focus:border-burgundy-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-burgundy-primary"
                         />
                       </div>

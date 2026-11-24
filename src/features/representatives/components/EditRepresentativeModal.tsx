@@ -10,7 +10,7 @@ export interface EditRepresentativeModalProps {
   isOpen: boolean;
   onClose: () => void;
   representative: RepresentativeItem | null;
-  onSave: (updatedRep: RepresentativeItem) => void;
+  onSave: (updatedRep: RepresentativeItem) => void | boolean | Promise<void | boolean>;
 }
 
 export const EditRepresentativeModal: React.FC<EditRepresentativeModalProps> = ({
@@ -79,7 +79,7 @@ export const EditRepresentativeModal: React.FC<EditRepresentativeModalProps> = (
     reader.readAsDataURL(file);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       setError("Please enter the representative's Full Name.");
@@ -106,7 +106,7 @@ export const EditRepresentativeModal: React.FC<EditRepresentativeModalProps> = (
       avatarUrl,
     };
 
-    onSave(updated);
+    if (await onSave(updated) === false) return;
     onClose();
   };
 

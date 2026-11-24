@@ -1,144 +1,77 @@
+import { resetApiSession } from "@/services/api/queryCache";
 import { create } from "zustand";
-import { currentUser as defaultUser } from "@/data/mockData";
 import { UserProfile } from "@/types";
+import { apiClient } from "@/services/api/apiClient";
+import { assetUrl } from "@/services/api/config";
+import { session, tokenClaims } from "@/services/api/session";
+import { useAppStore } from "./useAppStore";
+import { ApiError } from "@/services/api/apiError";
 
-const SESSION_TOKEN_KEY = "ams_auth_session_token";
-const SESSION_EXPIRY_KEY = "ams_auth_session_expiry";
-// Default 8-hour session lifetime
-const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
-
+export const emptyUser: UserProfile = {
+  name: "", role: "", email: "", avatarUrl: "", college: "", amsVersion: "1.0.0",
+};
 interface AuthState {
   isAuthenticated: boolean;
   sessionToken: string | null;
   user: UserProfile;
+  adminId: string | null;
+  permissions: Record<string, unknown>;
   sessionExpiry: number | null;
   login: (credentials: { email: string; password?: string }) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   checkSession: () => boolean;
   touchSession: () => void;
 }
-
-/**
- * Validates active session token from sessionStorage (isolated per browser session).
- */
-function getInitialAuthState(): { isAuthenticated: boolean; token: string | null; expiry: number | null } {
-  if (typeof window === "undefined") {
-    return { isAuthenticated: false, token: null, expiry: null };
-  }
-
-  try {
-    const token = window.sessionStorage.getItem(SESSION_TOKEN_KEY);
-    const rawExpiry = window.sessionStorage.getItem(SESSION_EXPIRY_KEY);
-    const expiry = rawExpiry ? parseInt(rawExpiry, 10) : null;
-
-    if (token && expiry && Date.now() < expiry) {
-      return { isAuthenticated: true, token, expiry };
-    }
-
-    // Default administrative session on initial access if not explicitly logged out
-    const isLoggedOut = window.sessionStorage.getItem("ams_explicit_logout") === "true";
-    if (!isLoggedOut) {
-      const defaultExpiry = Date.now() + SESSION_DURATION_MS;
-      const defaultToken = "ams_session_" + Math.random().toString(36).substring(2) + Date.now().toString(36);
-      window.sessionStorage.setItem(SESSION_TOKEN_KEY, defaultToken);
-      window.sessionStorage.setItem(SESSION_EXPIRY_KEY, defaultExpiry.toString());
-      return { isAuthenticated: true, token: defaultToken, expiry: defaultExpiry };
-    }
-
-    return { isAuthenticated: false, token: null, expiry: null };
-  } catch {
-    return { isAuthenticated: false, token: null, expiry: null };
-  }
-}
-
-const initialAuth = getInitialAuthState();
-
+const initialToken = session.token();
+const claims = tokenClaims(initialToken);
+const restored = claims ? session.user<UserProfile>() : null;
 export const useAuthStore = create<AuthState>((set, get) => ({
-  isAuthenticated: initialAuth.isAuthenticated,
-  sessionToken: initialAuth.token,
-  user: defaultUser,
-  sessionExpiry: initialAuth.expiry,
-
+  isAuthenticated: Boolean(claims && restored),
+  sessionToken: restored ? initialToken : null,
+  adminId: restored ? claims?.adminId || null : null,
+  permissions: {},
+  user: restored || emptyUser,
+  sessionExpiry: restored && claims ? claims.exp * 1000 : null,
   login: async ({ email, password }) => {
-    // Validate credentials presence
-    if (!email || !email.trim()) {
-      return { success: false, error: "Administrative email is required." };
-    }
-    if (password !== undefined && !password.trim()) {
-      return { success: false, error: "Password is required." };
-    }
-
-    // Generate secure session token and expiry
-    const newExpiry = Date.now() + SESSION_DURATION_MS;
-    const newToken = "ams_session_" + Math.random().toString(36).substring(2) + Date.now().toString(36);
-
+    if (!email.trim() || !password?.trim()) return { success: false, error: "Email and password are required." };
     try {
-      if (typeof window !== "undefined") {
-        window.sessionStorage.removeItem("ams_explicit_logout");
-        window.sessionStorage.setItem(SESSION_TOKEN_KEY, newToken);
-        window.sessionStorage.setItem(SESSION_EXPIRY_KEY, newExpiry.toString());
-      }
-    } catch {
-      // Ignore storage restrictions
+      const result = await apiClient.post<{ success: boolean; token: string }>("/api/admin/auth/login", { email: email.trim(), password }, { skipAuth: true });
+      const decoded = tokenClaims(result.token);
+      if (!result.success || !decoded) throw new Error("The server did not return a valid session.");
+      const response = await apiClient.get<{ admin: Record<string, any> }>(`/api/admin/admin-profile/${decoded.adminId}`, {
+        skipAuth: true, headers: { Authorization: `Bearer ${result.token}` },
+      });
+      const admin = response.admin;
+      const user: UserProfile = {
+        ...emptyUser, name: admin.name || "", email: admin.email || "", role: admin.type || "",
+        avatarUrl: assetUrl(admin.logo_name, "/uploads"), phone: admin.phone || "",
+        city: admin.address?.city || "", state: admin.address?.state || "", country: admin.address?.country || "",
+        status: admin.status || "", joinedDate: admin.createdAt || "",
+      };
+      session.save(result.token, user);
+      useAppStore.setState({ adminProfile: user, activities: [], notifications: [] });
+      set({ isAuthenticated: true, sessionToken: result.token, adminId: decoded.adminId, user,
+        permissions: admin.accessPermissions || {}, sessionExpiry: decoded.exp * 1000 });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof ApiError
+        ? error.status === 401 ? "Invalid email or password." : error.userMessage
+        : "Unable to establish your session. Please try again." };
     }
-
-    set({
-      isAuthenticated: true,
-      sessionToken: newToken,
-      sessionExpiry: newExpiry,
-    });
-
-    return { success: true };
   },
-
   logout: () => {
-    try {
-      if (typeof window !== "undefined") {
-        window.sessionStorage.setItem("ams_explicit_logout", "true");
-        window.sessionStorage.removeItem(SESSION_TOKEN_KEY);
-        window.sessionStorage.removeItem(SESSION_EXPIRY_KEY);
-      }
-    } catch {
-      // Ignore storage restrictions
-    }
-
-    set({
-      isAuthenticated: false,
-      sessionToken: null,
-      sessionExpiry: null,
-    });
+    resetApiSession(null);
+    session.clear();
+    useAppStore.setState({ adminProfile: emptyUser, activities: [], notifications: [] });
+    set({ isAuthenticated: false, sessionToken: null, sessionExpiry: null, adminId: null, user: emptyUser, permissions: {} });
+    window.dispatchEvent(new Event("ams-session-ended"));
   },
-
   checkSession: () => {
-    const { sessionExpiry, sessionToken } = get();
-    if (!sessionToken || !sessionExpiry) {
-      if (get().isAuthenticated) {
-        get().logout();
-      }
+    if (!tokenClaims(get().sessionToken)) {
+      if (get().isAuthenticated) get().logout();
       return false;
     }
-
-    if (Date.now() >= sessionExpiry) {
-      get().logout();
-      return false;
-    }
-
     return true;
   },
-
-  touchSession: () => {
-    const { isAuthenticated } = get();
-    if (!isAuthenticated) return;
-
-    const newExpiry = Date.now() + SESSION_DURATION_MS;
-    try {
-      if (typeof window !== "undefined") {
-        window.sessionStorage.setItem(SESSION_EXPIRY_KEY, newExpiry.toString());
-      }
-    } catch {
-      // Ignore
-    }
-
-    set({ sessionExpiry: newExpiry });
-  },
+  touchSession: () => { get().checkSession(); },
 }));

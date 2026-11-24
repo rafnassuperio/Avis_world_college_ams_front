@@ -1,105 +1,49 @@
-import React, { useState, useMemo } from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useMemo, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { RotateCcw, CreditCard, CheckCircle2 } from "lucide-react";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { FilterSelect } from "@/components/ui/FilterSelect";
 import { Pagination } from "@/components/ui/Pagination";
 import { DataTable, ColumnDef } from "@/components/ui/Table";
-import { PaymentRecord, PaymentHistoryItem } from "../types";
-import { toast } from "@/components/common/ToastMessage";
+import { getTransactionPage, getTransactionMethods, downloadPaymentReceipt, type PaymentTransaction } from "@/services/payments";
+import { useApiQuery } from "@/hooks/useApiQuery";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { dashboardContainerVariants, dashboardSectionVariants, smoothEase } from "@/components/animations/transitions";
 
-export interface FlatPaymentTransaction extends PaymentHistoryItem {
-  parentRecord: PaymentRecord;
-  collegeName: string;
-  studentName: string;
-  studentCode: string;
-  studentEmail: string;
-  course: string;
-  rowNumber: number;
-  repCommission: number;
-  agentCommission: number;
-}
+export type FlatPaymentTransaction = PaymentTransaction;
 
-export interface PaymentHistoryViewProps {
-  records: PaymentRecord[];
-}
-
-export const PaymentHistoryView: React.FC<PaymentHistoryViewProps> = ({ records }) => {
+export const PaymentHistoryView: React.FC = () => {
+  const navigate = useNavigate();
   const shouldReduceMotion = useReducedMotion();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedMethod, setSelectedMethod] = useState("All Methods");
   const [selectedStatus, setSelectedStatus] = useState("All Status");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({ page: 1, filters: "" });
   const [pageSize, setPageSize] = useState(8);
 
   // Smooth entrance variants
   const containerVariants = shouldReduceMotion ? { hidden: { opacity: 1 }, visible: { opacity: 1 } } : dashboardContainerVariants;
   const sectionVariants = shouldReduceMotion ? { hidden: { opacity: 1 }, visible: { opacity: 1 } } : dashboardSectionVariants;
 
-  // Flatten all transactions from records for chronological ledger view
-  const allTransactions: FlatPaymentTransaction[] = useMemo(() => {
-    const list: FlatPaymentTransaction[] = [];
-    let counter = 1;
-
-    records.forEach((rec) => {
-      rec.history.forEach((hist) => {
-        list.push({
-          ...hist,
-          parentRecord: rec,
-          collegeName: rec.collegeName || "Avis World College",
-          studentName: rec.student.name,
-          studentCode: rec.student.studentCode,
-          studentEmail: rec.student.email,
-          course: rec.student.course,
-          rowNumber: counter++,
-          repCommission: hist.repCommission ?? rec.repCommission ?? 0,
-          agentCommission: hist.agentCommission ?? rec.agentCommission ?? 0,
-        });
-      });
-    });
-
-    return list;
-  }, [records]);
-
-  // Unique payment methods
-  const methodOptions = ["All Methods", "Credit Card", "Debit Card", "Bank Transfer", "PayNow", "UPI"];
-
-  // Filtered transactions
-  const filteredTransactions = useMemo(() => {
-    return allTransactions.filter((item) => {
-      const q = searchQuery.trim().toLowerCase();
-      const matchesSearch =
-        !q ||
-        item.receiptNo.toLowerCase().includes(q) ||
-        item.transactionRef.toLowerCase().includes(q) ||
-        item.studentName.toLowerCase().includes(q) ||
-        item.studentCode.toLowerCase().includes(q) ||
-        item.collegeName.toLowerCase().includes(q) ||
-        item.course.toLowerCase().includes(q) ||
-        item.paymentMethod.toLowerCase().includes(q);
-
-      const matchesMethod = selectedMethod === "All Methods" || item.paymentMethod.toLowerCase().includes(selectedMethod.toLowerCase());
-      const matchesStatus = selectedStatus === "All Status" || item.status.toLowerCase() === selectedStatus.toLowerCase();
-
-      return matchesSearch && matchesMethod && matchesStatus;
-    });
-  }, [allTransactions, searchQuery, selectedMethod, selectedStatus]);
-
-  // Reset pagination on filter change
-  React.useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, selectedMethod, selectedStatus]);
-
-  // Pagination slicing
-  const totalItems = filteredTransactions.length;
+  const filters = useDebouncedValue(JSON.stringify({ search: searchQuery.trim(), method: selectedMethod === "All Methods" ? "" : selectedMethod, status: selectedStatus === "All Status" ? "" : selectedStatus }));
+  const currentPage = pagination.filters === filters ? pagination.page : 1;
+  const setCurrentPage = (page: number) => setPagination({ page, filters });
+  const { data, loading, error, reload } = useApiQuery(signal => getTransactionPage({ ...JSON.parse(filters), page: currentPage, limit: pageSize }, signal), [filters, currentPage, pageSize]);
+  const methods = useApiQuery(getTransactionMethods);
+  const methodOptions = ["All Methods", ...(methods.data || [])];
+  const filteredTransactions = data?.records || [];
+  const paginatedTransactions = filteredTransactions;
+  const totalItems = data?.total || 0;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const safePage = Math.min(currentPage, totalPages);
-  const paginatedTransactions = useMemo(() => {
-    const start = (safePage - 1) * pageSize;
-    return filteredTransactions.slice(start, start + pageSize);
-  }, [filteredTransactions, safePage, pageSize]);
+  const safePage = currentPage;
+  useEffect(() => { if (!loading && data && currentPage > totalPages) setCurrentPage(totalPages); }, [loading, data, currentPage, totalPages]);
+  useEffect(() => {
+    const refresh = () => { void reload(); void methods.reload(); };
+    window.addEventListener("ams_payment_records_updated", refresh);
+    return () => window.removeEventListener("ams_payment_records_updated", refresh);
+  }, [reload, methods.reload]);
 
   const hasActiveFilters = Boolean(searchQuery || selectedMethod !== "All Methods" || selectedStatus !== "All Status");
 
@@ -132,7 +76,8 @@ export const PaymentHistoryView: React.FC<PaymentHistoryViewProps> = ({ records 
           <div className="flex flex-col">
             <button
               type="button"
-              onClick={() => console.log(tx.parentRecord)}
+              disabled={!tx.paymentId}
+              onClick={() => navigate(`/payment/settle/${tx.paymentId}`)}
               className="text-left font-mono font-bold text-burgundy-primary transition-colors hover:underline"
               title="Click to view complete payment record details"
             >
@@ -164,7 +109,9 @@ export const PaymentHistoryView: React.FC<PaymentHistoryViewProps> = ({ records 
         cell: (tx) => (
           <div className="flex flex-col">
             <Link
-              to={`/college/students/${tx.studentCode || tx.parentRecord.student.id}`}
+              to={tx.studentId ? `/college/students/${tx.studentId}` : "#"}
+              aria-disabled={!tx.studentId}
+              onClick={event => { if (!tx.studentId) event.preventDefault(); }}
               className="font-bold text-text-primary transition-colors hover:text-burgundy-primary hover:underline"
               title={`View ${tx.studentName}'s profile`}
             >
@@ -232,25 +179,19 @@ export const PaymentHistoryView: React.FC<PaymentHistoryViewProps> = ({ records 
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.97 }}
               type="button"
-              onClick={() => {
-                toast.success("Course Fee Receipt", {
-                  description: `Course fee receipt downloaded for ${tx.studentName} (${tx.receiptNo}).`,
-                });
-              }}
+              disabled={tx.feeCategory === "Application Fee" || tx.status === "Pending"}
+              onClick={() => void downloadPaymentReceipt(tx.id)}
               className="shadow-2xs hover:shadow-xs inline-flex w-full max-w-[155px] items-center justify-center rounded-lg bg-gradient-to-r from-brand-red to-burgundy-primary px-3 py-1.5 text-[11px] font-bold text-white transition-all hover:brightness-110 active:scale-95"
-              title="Download Course Fee Receipt"
+              title={tx.feeCategory === "Other Payment" ? "Download Other Payment Receipt" : "Download Course Fee Receipt"}
             >
-              Course Fee Receipt
+              {tx.feeCategory === "Other Payment" ? "Other Payment Receipt" : "Course Fee Receipt"}
             </motion.button>
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.97 }}
               type="button"
-              onClick={() => {
-                toast.success("Application Fee Receipt", {
-                  description: `Application fee receipt downloaded for ${tx.studentName} (${tx.receiptNo}).`,
-                });
-              }}
+              disabled={tx.feeCategory !== "Application Fee" || tx.status === "Pending"}
+              onClick={() => void downloadPaymentReceipt(tx.id)}
               className="shadow-2xs hover:shadow-xs inline-flex w-full max-w-[155px] items-center justify-center rounded-lg bg-burgundy-dark px-3 py-1.5 text-[11px] font-bold text-white transition-all hover:bg-palette-midnight active:scale-95"
               title="Download Application Fee Receipt"
             >
@@ -262,6 +203,8 @@ export const PaymentHistoryView: React.FC<PaymentHistoryViewProps> = ({ records 
     ],
     [safePage, pageSize],
   );
+
+  if ((!data && loading) || error || methods.error) return <AsyncStateView isLoading={loading} error={error || methods.error} onRetry={() => { void reload(); void methods.reload(); }}>{null}</AsyncStateView>;
 
   return (
     <motion.div

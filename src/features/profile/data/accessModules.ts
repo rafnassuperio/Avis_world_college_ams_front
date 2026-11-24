@@ -8,7 +8,7 @@ export const defaultAccessRoleModules: AccessRoleModuleItem[] = [
     description: "Main administrative analytical dashboard, KPI widgets, and system overview cards.",
     category: "Overview",
     iconName: "LayoutDashboard",
-    permissions: { view: true, add: true, edit: true, delete: true, update: true },
+    permissions: { view: false, add: false, edit: false, delete: false, update: false },
   },
   {
     id: "report-dashboard",
@@ -16,7 +16,7 @@ export const defaultAccessRoleModules: AccessRoleModuleItem[] = [
     description: "Executive report intelligence, institutional metrics, visual charts, and trend data.",
     category: "Overview",
     iconName: "BarChart3",
-    permissions: { view: true, add: true, edit: true, delete: true, update: true },
+    permissions: { view: false, add: false, edit: false, delete: false, update: false },
   },
   {
     id: "student-management",
@@ -24,7 +24,7 @@ export const defaultAccessRoleModules: AccessRoleModuleItem[] = [
     description: "Full student lifecycle management: admissions, records, bio-data, enrollments, and status.",
     category: "Academics",
     iconName: "GraduationCap",
-    permissions: { view: true, add: true, edit: true, delete: true, update: true },
+    permissions: { view: false, add: false, edit: false, delete: false, update: false },
   },
   {
     id: "module-exemption",
@@ -32,7 +32,7 @@ export const defaultAccessRoleModules: AccessRoleModuleItem[] = [
     description: "Course module waivers, academic exemptions, transfer credit verification, and approval flow.",
     category: "Academics",
     iconName: "FileCheck",
-    permissions: { view: true, add: true, edit: true, delete: true, update: true },
+    permissions: { view: false, add: false, edit: false, delete: false, update: false },
   },
   {
     id: "student-document-statics",
@@ -40,7 +40,7 @@ export const defaultAccessRoleModules: AccessRoleModuleItem[] = [
     description: "Document analytics, verification rate metrics, missing checklist tracking, and audit metrics.",
     category: "Administration",
     iconName: "FileSpreadsheet",
-    permissions: { view: true, add: true, edit: true, delete: true, update: true },
+    permissions: { view: false, add: false, edit: false, delete: false, update: false },
   },
   {
     id: "college-report",
@@ -48,7 +48,7 @@ export const defaultAccessRoleModules: AccessRoleModuleItem[] = [
     description: "College campus performance reports, student intake distributions, and faculty summaries.",
     category: "Administration",
     iconName: "Building2",
-    permissions: { view: true, add: true, edit: true, delete: true, update: true },
+    permissions: { view: false, add: false, edit: false, delete: false, update: false },
   },
   {
     id: "agent-rep-report",
@@ -56,7 +56,7 @@ export const defaultAccessRoleModules: AccessRoleModuleItem[] = [
     description: "Agent representative performance statements, lead conversion rates, and recruitment records.",
     category: "Partners",
     iconName: "UserCheck",
-    permissions: { view: true, add: true, edit: true, delete: true, update: true },
+    permissions: { view: false, add: false, edit: false, delete: false, update: false },
   },
   {
     id: "student-document-management",
@@ -64,7 +64,7 @@ export const defaultAccessRoleModules: AccessRoleModuleItem[] = [
     description: "Repository of student identification, passport scans, transcripts, and verified certificates.",
     category: "Administration",
     iconName: "FolderOpen",
-    permissions: { view: true, add: true, edit: true, delete: true, update: true },
+    permissions: { view: false, add: false, edit: false, delete: false, update: false },
   },
   {
     id: "course-management",
@@ -72,7 +72,7 @@ export const defaultAccessRoleModules: AccessRoleModuleItem[] = [
     description: "Academic courses, degree programs, curriculum syllabi, prerequisites, and faculty allocations.",
     category: "Academics",
     iconName: "BookOpen",
-    permissions: { view: true, add: true, edit: true, delete: true, update: true },
+    permissions: { view: false, add: false, edit: false, delete: false, update: false },
   },
 
   // Right Column (10 - 18)
@@ -82,7 +82,7 @@ export const defaultAccessRoleModules: AccessRoleModuleItem[] = [
     description: "Course fee structures, tuition brackets, installment schedules, and scholarship discounts.",
     category: "Finance",
     iconName: "Receipt",
-    permissions: { view: true, add: true, edit: true, delete: true, update: true },
+    permissions: { view: false, add: false, edit: false, delete: false, update: false },
   },
   {
     id: "bulk-upload-option",
@@ -90,7 +90,7 @@ export const defaultAccessRoleModules: AccessRoleModuleItem[] = [
     description: "CSV / Excel batch data ingestion for students, course fees, exam grades, and partner accounts.",
     category: "Administration",
     iconName: "UploadCloud",
-    permissions: { view: true, add: true, edit: true, delete: true, update: true },
+    permissions: { view: false, add: false, edit: false, delete: false, update: false },
   },
   {
     id: "payment-option",
@@ -98,7 +98,7 @@ export const defaultAccessRoleModules: AccessRoleModuleItem[] = [
     description: "Payment gateway integration, bank deposit verifications, merchant methods, and receipt printing.",
     category: "Finance",
     iconName: "CreditCard",
-    permissions: { view: true, add: true, edit: true, delete: true, update: true },
+    permissions: { view: false, add: false, edit: false, delete: false, update: false },
   },
   {
     id: "category-management",
@@ -106,7 +106,7 @@ export const defaultAccessRoleModules: AccessRoleModuleItem[] = [
     description: "Taxonomy categories, program groupings, student demographics classifications, and tags.",
     category: "Administration",
     iconName: "Tags",
-    permissions: { view: true, add: true, edit: true, delete: true, update: true },
+    permissions: { view: false, add: false, edit: false, delete: false, update: false },
   },
   {
     id: "college-management",
@@ -114,7 +114,7 @@ export const defaultAccessRoleModules: AccessRoleModuleItem[] = [
     description: "Multi-campus management, institutional branches, physical facilities, and dean contacts.",
     category: "Administration",
     iconName: "School",
-    permissions: { view: true, add: true, edit: true, delete: true, update: true },
+    permissions: { view: false, add: false, edit: false, delete: false, update: false },
   },
   {
     id: "agent-management",
@@ -122,7 +122,7 @@ export const defaultAccessRoleModules: AccessRoleModuleItem[] = [
     description: "Consultant agency profiles, partner contracts, authorization certificates, and credentials.",
     category: "Partners",
     iconName: "Users",
-    permissions: { view: true, add: true, edit: true, delete: true, update: true },
+    permissions: { view: false, add: false, edit: false, delete: false, update: false },
   },
   {
     id: "commission-management",
@@ -130,7 +130,7 @@ export const defaultAccessRoleModules: AccessRoleModuleItem[] = [
     description: "Agent commission percentage rates, payout ledgers, settlement approvals, and invoice generation.",
     category: "Finance",
     iconName: "Percent",
-    permissions: { view: true, add: true, edit: true, delete: true, update: true },
+    permissions: { view: false, add: false, edit: false, delete: false, update: false },
   },
   {
     id: "representative-management",
@@ -138,7 +138,7 @@ export const defaultAccessRoleModules: AccessRoleModuleItem[] = [
     description: "Designated institutional representatives, field recruiting officers, and branch managers.",
     category: "Partners",
     iconName: "UserCheck",
-    permissions: { view: true, add: true, edit: true, delete: true, update: true },
+    permissions: { view: false, add: false, edit: false, delete: false, update: false },
   },
   {
     id: "intake-management",
@@ -146,7 +146,7 @@ export const defaultAccessRoleModules: AccessRoleModuleItem[] = [
     description: "Academic semester intakes, registration deadlines, admission quotas, and intake statuses.",
     category: "Academics",
     iconName: "CalendarDays",
-    permissions: { view: true, add: true, edit: true, delete: true, update: true },
+    permissions: { view: false, add: false, edit: false, delete: false, update: false },
   },
 ];
 

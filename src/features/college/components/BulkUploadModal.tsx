@@ -5,11 +5,12 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Avatar } from "@/components/ui/Avatar";
 import { toast } from "@/components/common/ToastMessage";
-import { safeStorage } from "@/lib/security";
+
 import { cn } from "@/lib/utils";
-import { CollegeBulkUploadHistory, CollegeStudent } from "../types";
-import { initialStudentsData, initialBulkUploadHistory } from "../data/collegeTabData";
-import { sampleParsedStudents, parseStudentsCsv, downloadTemplateCsv } from "../data/bulkUploadData";
+import { CollegeStudent } from "../types";
+
+import { parseUpload, importUpload, downloadStudentTemplate as downloadTemplateCsv } from "@/services/bulkUpload";
+import { apiMessage } from "@/services/ams";
 import { smoothEase, gentleSpring } from "@/components/animations/transitions";
 
 export interface BulkUploadModalProps {
@@ -18,8 +19,6 @@ export interface BulkUploadModalProps {
   onSuccess?: (importedStudents: CollegeStudent[]) => void;
 }
 
-const STORAGE_KEY_STUDENTS = "ams_college_students_list";
-const STORAGE_KEY_HISTORY = "ams_college_bulk_upload_history";
 
 export const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const shouldReduceMotion = useReducedMotion();
@@ -82,88 +81,29 @@ export const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ isOpen, onClos
     toast.info("Upload selection reset.");
   };
 
-  const handleParseFile = () => {
+  const handleParseFile = async () => {
+    if (!selectedFile) { toast.error("Select a file first."); return; }
     setIsParsing(true);
+    try {
+      const rows = await parseUpload(selectedFile); setParsedStudents(rows);
 
-    setTimeout(() => {
-      if (selectedFile) {
-        if (selectedFile.name.endsWith(".csv")) {
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            const content = event.target?.result as string;
-            if (content) {
-              const students = parseStudentsCsv(content);
-              if (students.length > 0) {
-                setParsedStudents(students);
-                toast.success(`Successfully parsed ${students.length} student records from ${selectedFile.name}!`);
-              } else {
-                setParsedStudents(sampleParsedStudents);
-                toast.success(`Parsed ${sampleParsedStudents.length} student records for review.`);
-              }
-            }
-            setIsParsing(false);
-          };
-          reader.onerror = () => {
-            setIsParsing(false);
-            toast.error("Failed to read the file.");
-          };
-          reader.readAsText(selectedFile);
-          return;
-        }
-
-        // For XLSX/XLS files
-        setParsedStudents(sampleParsedStudents);
-        toast.success(`Successfully parsed ${sampleParsedStudents.length} student records from ${selectedFile.name}!`);
-      } else {
-        // If no file selected yet, auto-load realistic sample batch
-        setParsedStudents(sampleParsedStudents);
-        toast.info("Loaded sample batch of 8 students for review.");
-      }
-      setIsParsing(false);
-    }, 450);
+      toast.success(`Parsed ${rows.length} student records for review.`);
+    } catch (error) { toast.error("Unable to parse file", { description: apiMessage(error) }); }
+    finally { setIsParsing(false); }
   };
 
-  const handleConfirmImport = () => {
-    if (!parsedStudents || parsedStudents.length === 0) return;
-
+  const handleConfirmImport = async () => {
+    if (!selectedFile || !parsedStudents?.length || isImporting) return;
     setIsImporting(true);
-
-    setTimeout(() => {
-      const currentStudents = safeStorage.getItem<CollegeStudent[]>(STORAGE_KEY_STUDENTS, initialStudentsData);
-      const updatedStudents = [...parsedStudents, ...currentStudents];
-      safeStorage.setItem(STORAGE_KEY_STUDENTS, updatedStudents);
-
-      // Append new entry to history
-      const currentHistory = safeStorage.getItem<CollegeBulkUploadHistory[]>(STORAGE_KEY_HISTORY, initialBulkUploadHistory);
-      const newHistoryEntry: CollegeBulkUploadHistory = {
-        id: `blk-${Date.now()}`,
-        fileName: selectedFile ? selectedFile.name : `Batch_Students_${new Date().toISOString().slice(0, 10)}.xlsx`,
-        entityType: "Students",
-        uploadedAt: new Date().toLocaleDateString("en-GB", {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        uploadedBy: "Admin Office",
-        totalRows: parsedStudents.length,
-        successRows: parsedStudents.length,
-        errorRows: 0,
-        status: "Completed",
-        fileSize: selectedFile ? `${(selectedFile.size / 1024).toFixed(1)} KB` : "1.2 MB",
-      };
-      safeStorage.setItem(STORAGE_KEY_HISTORY, [newHistoryEntry, ...currentHistory]);
-
-      window.dispatchEvent(new CustomEvent("ams_students_updated", { detail: { count: parsedStudents.length } }));
-      onSuccess?.(parsedStudents);
-
-      toast.success(`Successfully imported ${parsedStudents.length} students into the system!`);
-      setIsImporting(false);
-      setParsedStudents(null);
-      setSelectedFile(null);
-      onClose();
-    }, 500);
+    try {
+      const result = await importUpload(selectedFile);
+      if (result.errors.length) toast.warning("Students imported with warnings", { description: JSON.stringify(result.errors).slice(0, 500) });
+      else toast.success(`Imported ${result.count} students.`);
+      onSuccess?.(parsedStudents); onClose();
+      setParsedStudents(null); setSelectedFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } catch (error) { toast.error("Import failed", { description: apiMessage(error) }); }
+    finally { setIsImporting(false); }
   };
 
   const rowVariants = {

@@ -970,17 +970,14 @@ export function Tabs<T extends string = string, S extends string = string>({
           className={cn("w-full", panelClassName)}
         >
           {animated ? (
-            <AnimatePresence mode="wait">
               <motion.div
                 key={`${String(activeTab)}-${hasChildTabs ? String(currentActiveSubTabId) : "root"}`}
-                initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 10 }}
+                initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -8 }}
-                transition={{ duration: 0.22, ease: smoothEase }}
+                transition={{ duration: 0.14, ease: smoothEase }}
               >
                 {panelContent}
               </motion.div>
-            </AnimatePresence>
           ) : (
             panelContent
           )}

@@ -1,3 +1,6 @@
+import { apiClient } from "@/services/api/apiClient";
+import { apiMessage } from "@/services/ams";
+import { useAuthStore } from "@/store/useAuthStore";
 import React, { useState, useMemo } from "react";
 import { StudentDetailsCard } from "./StudentDetailsCard";
 import { FeeSummaryCard } from "./FeeSummaryCard";
@@ -28,15 +31,15 @@ export const CourseFeesTab: React.FC<CourseFeesTabProps> = ({ record, onUpdate }
   // ----------------------------------------------------
   // Fee Breakdown Constants (Requested DHM Structure)
   // ----------------------------------------------------
-  const tuitionFee = 2000.0;
-  const feeProtection = 150.0;
-  const amountExclGst = 2150.0; // 2000 + 150
-  const gstRatePercent = 9;
-  const gstAmount = 193.5; // 9% of 2150
-  const totalCourseFee = 2343.5; // 2150 + 193.5
-  const totalAmountAfterComm = 681.5;
-  const totalFeeRequested = 2561.5; // 2343.5 + 218 (Admin/App fee incl. GST)
-  const adminAppFee = 218.0;
+  const tuitionFee = record.feeBreakdown?.tuitionFee || 0;
+  const feeProtection = record.feeBreakdown?.feeProtection || 0;
+  const amountExclGst = record.feeBreakdown?.subTotal || 0; // 2000 + 150
+  const gstRatePercent = amountExclGst ? Number(((record.feeBreakdown?.gst || 0) / amountExclGst * 100).toFixed(2)) : 0;
+  const gstAmount = record.feeBreakdown?.gst || 0; // 9% of 2150
+  const totalCourseFee = record.totalFee; // 2150 + 193.5
+  const totalAmountAfterComm = record.amountToCollege;
+  const totalFeeRequested = record.totalFee + (record.applicationFees || 0); // 2343.5 + 218 (Admin/App fee incl. GST)
+  const adminAppFee = record.applicationFees || 0;
 
   // ----------------------------------------------------
   // Form State for Payment Details
@@ -45,7 +48,7 @@ export const CourseFeesTab: React.FC<CourseFeesTabProps> = ({ record, onUpdate }
   const [paymentMethod, setPaymentMethod] = useState("Cash");
   const [paymentDate, setPaymentDate] = useState(getTodayIso);
   const [oneTimeSettlement, setOneTimeSettlement] = useState("0.00");
-  const [paymentAmount, setPaymentAmount] = useState(totalCourseFee.toFixed(2));
+  const [paymentAmount, setPaymentAmount] = useState((record.outstandingAmount ?? totalCourseFee).toFixed(2));
   const [agentComm, setAgentComm] = useState("0.00");
   const [repComm, setRepComm] = useState("0.00");
   const [amountError, setAmountError] = useState("");
@@ -57,8 +60,8 @@ export const CourseFeesTab: React.FC<CourseFeesTabProps> = ({ record, onUpdate }
   // ----------------------------------------------------
   // Commission Split State (Requested: Agent SGD 940, Rep SGD 940, Total SGD 1,880)
   // ----------------------------------------------------
-  const [agentShare, setAgentShare] = useState<number>(940.0);
-  const [repShare, setRepShare] = useState<number>(940.0);
+  const [agentShare, setAgentShare] = useState<number>(record.agentCommission);
+  const [repShare, setRepShare] = useState<number>(record.repCommission);
   const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
 
   // Course Fee settlements from student history
@@ -76,7 +79,7 @@ export const CourseFeesTab: React.FC<CourseFeesTabProps> = ({ record, onUpdate }
     return courseHistory.reduce((sum, h) => sum + h.amount, 0);
   }, [courseHistory]);
 
-  const currentOutstandingCourseFee = Math.max(0, totalCourseFee - totalCoursePaid);
+  const currentOutstandingCourseFee = record.outstandingAmount ?? Math.max(0, totalCourseFee - totalCoursePaid);
   const isSettled = currentOutstandingCourseFee === 0 && courseHistory.length > 0;
 
   const fmt = (val: number) => {
@@ -96,7 +99,7 @@ export const CourseFeesTab: React.FC<CourseFeesTabProps> = ({ record, onUpdate }
     setPaymentMethod("Cash");
     setPaymentDate(getTodayIso());
     setOneTimeSettlement("0.00");
-    setPaymentAmount(totalCourseFee.toFixed(2));
+    setPaymentAmount((record.outstandingAmount ?? totalCourseFee).toFixed(2));
     setAgentComm("0.00");
     setRepComm("0.00");
     setAmountError("");
@@ -106,18 +109,18 @@ export const CourseFeesTab: React.FC<CourseFeesTabProps> = ({ record, onUpdate }
   };
 
   // 2. Reset Course Fee
-  const handleResetCourseFee = () => {
-    resetPaymentRecord(record.id);
+  const handleResetCourseFee = async () => {
+    if (!await resetPaymentRecord(record.id)) return;
     setReceiptNo("");
     setPaymentMethod("Cash");
     setPaymentDate(getTodayIso());
     setOneTimeSettlement("0.00");
-    setPaymentAmount(totalCourseFee.toFixed(2));
+    setPaymentAmount((record.outstandingAmount ?? totalCourseFee).toFixed(2));
     setAgentComm("0.00");
     setRepComm("0.00");
     setAmountError("");
-    setAgentShare(940.0);
-    setRepShare(940.0);
+    setAgentShare(record.agentCommission);
+    setRepShare(record.repCommission);
 
     toast.warning("Course Fee Reset", {
       description: `Course fee for ${record.student.name} has been reset to Pending status.`,
@@ -127,7 +130,7 @@ export const CourseFeesTab: React.FC<CourseFeesTabProps> = ({ record, onUpdate }
   };
 
   // 3. Settle Course Fee
-  const handleSettleCourseFee = () => {
+  const handleSettleCourseFee = async () => {
     const numAmount = parseFloat(paymentAmount.replace(/,/g, ""));
     if (isNaN(numAmount) || numAmount <= 0) {
       setAmountError("Please enter a valid payment amount greater than SGD 0");
@@ -141,13 +144,14 @@ export const CourseFeesTab: React.FC<CourseFeesTabProps> = ({ record, onUpdate }
     const parsedAgentComm = parseFloat(agentComm.replace(/,/g, "")) || 0;
     const parsedRepComm = parseFloat(repComm.replace(/,/g, "")) || 0;
 
-    const res = settlePaymentRecord(record.id, {
+    const res = await settlePaymentRecord(record.id, {
       amount: numAmount,
       paymentMethod: paymentMethod as PaymentHistoryItem["paymentMethod"],
       receiptNo: receiptNo.trim() || undefined,
       feeCategory: "Course Fee",
-      itemName: "Diploma in Hospitality Management (DHM) Course Fee",
+      itemName: record.student.course,
       note: `Course fee settlement (${paymentMethod}) on ${paymentDate}`,
+      paymentDate,
       agentCommission: parsedAgentComm,
       repCommission: parsedRepComm,
     });
@@ -162,7 +166,7 @@ export const CourseFeesTab: React.FC<CourseFeesTabProps> = ({ record, onUpdate }
       });
       setReceiptNo("");
       onUpdate?.();
-    } else {
+    } else if (!res.success) {
       toast.error("Settlement Failed", {
         description: "Could not record payment settlement. Please try again.",
       });
@@ -180,15 +184,20 @@ export const CourseFeesTab: React.FC<CourseFeesTabProps> = ({ record, onUpdate }
 
   // 5. One Time Settlement Full Apply
   const handleApplyOneTimeSettlement = () => {
-    setOneTimeSettlement(totalCourseFee.toFixed(2));
-    setPaymentAmount(totalCourseFee.toFixed(2));
+    setOneTimeSettlement((record.outstandingAmount ?? totalCourseFee).toFixed(2));
+    setPaymentAmount((record.outstandingAmount ?? totalCourseFee).toFixed(2));
     toast.success("One-Time Full Settlement Applied", {
       description: `Settlement set to SGD ${fmt(totalCourseFee)}.`,
     });
   };
 
   // 6. Commission Split Save from Modal
-  const handleApplySplit = (newAgentShare: number, newRepShare: number, syncWithPaymentDetails: boolean) => {
+  const handleApplySplit = async (newAgentShare: number, newRepShare: number, syncWithPaymentDetails: boolean) => {
+    try {
+      if (newAgentShare + newRepShare + (record.adminCommission || 0) > record.totalFee) throw new Error("Total commission cannot exceed the course fee.");
+      await apiClient.patch("/api/admin/payments/quick-update-commission", { paymentId: record.id, admin: useAuthStore.getState().adminId, agentId: record.agentId, repId: record.repId, agentCommission: newAgentShare, repCommission: newRepShare, adminCommission: newAgentShare + newRepShare + (record.adminCommission || 0) });
+    } catch (error) { toast.error("Unable to save split", { description: apiMessage(error) }); return false; }
+    onUpdate?.();
     setAgentShare(newAgentShare);
     setRepShare(newRepShare);
 

@@ -25,11 +25,13 @@ import { FilterSelect, FilterSelectOption } from "@/components/ui/FilterSelect";
 import { FilterDatePicker } from "@/components/ui/FilterDatePicker";
 import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/ui/Pagination";
-import { mockPaymentReportList } from "../data/mockPaymentReportData";
+import { getFinanceLedger, useFinanceOptions } from "@/services/reports";
+import { useApiQuery } from "@/hooks/useApiQuery";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { PaymentReportRecord } from "../types";
 
 export const PaymentReportTab: React.FC = () => {
-  const [data] = useState<PaymentReportRecord[]>(mockPaymentReportList);
 
   // Filters, Search, Date & Period
   const [searchQuery, setSearchQuery] = useState("");
@@ -40,20 +42,17 @@ export const PaymentReportTab: React.FC = () => {
   const [selectedPeriod, setSelectedPeriod] = useState("semi-annual");
   const [sortBy, setSortBy] = useState<"date-asc" | "date-desc" | "payload-desc" | "payload-asc" | "yield-desc" | "name-asc">("date-asc");
 
-  // Pagination
-  const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(8);
-
-  // Reset page when filters or date change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, selectedCourse, selectedStatus, selectedMethod, earliestPaymentDate, selectedPeriod, sortBy]);
-
-  // Distinct course options
-  const courseOptions: FilterSelectOption[] = useMemo(() => {
-    const unique = Array.from(new Set(data.map((d) => d.course)));
-    return [{ label: "All Courses", value: "all" }, ...unique.map((course) => ({ label: course, value: course }))];
-  }, [data]);
+  const filters = useDebouncedValue(JSON.stringify({ search: searchQuery.trim() || undefined,
+    course: selectedCourse === "all" ? undefined : selectedCourse, status: selectedStatus === "all" ? undefined : selectedStatus,
+    method: selectedMethod === "all" ? undefined : selectedMethod, period: selectedPeriod, sort: sortBy,
+    earliest: earliestPaymentDate ? new Date(new Date(earliestPaymentDate).setHours(0, 0, 0, 0)).toISOString() : undefined, limit: pageSize }));
+  const [paging, setPaging] = useState({ filters: "", page: 1 });
+  const currentPage = paging.filters === filters ? paging.page : 1;
+  const setCurrentPage = (page: number) => setPaging({filters, page});
+  const { data: report, loading, error, reload } = useApiQuery(signal => getFinanceLedger({...JSON.parse(filters), page: currentPage}, signal), [filters, currentPage]);
+  const options = useFinanceOptions();
+  const courseOptions: FilterSelectOption[] = [{label: "All Courses", value: "all"}, ...(options.data?.courses || []).map(course => ({label: course, value: course}))];
 
   // Status options
   const statusOptions: FilterSelectOption[] = [
@@ -74,139 +73,9 @@ export const PaymentReportTab: React.FC = () => {
     { label: "Annual Performance", value: "annual", icon: Calendar },
   ];
 
-  // Reference time for period calculation based on latest transaction date in dataset
-  const referenceTime = useMemo(() => {
-    const timestamps = data.map((d) => Date.parse(d.date)).filter((t) => !isNaN(t));
-    return timestamps.length > 0 ? Math.max(...timestamps) : Date.now();
-  }, [data]);
-
-  // Filtered and sorted dataset
-  const filteredData = useMemo(() => {
-    const filtered = data.filter((item) => {
-      const q = searchQuery.toLowerCase().trim();
-      const payloadVal = item.totalPayload ?? item.totalFee;
-      const yieldVal = item.courseYield ?? item.totalFee - 1300;
-
-      const matchesSearch =
-        !q ||
-        item.receiptNo.toLowerCase().includes(q) ||
-        item.studentName.toLowerCase().includes(q) ||
-        item.studentId.toLowerCase().includes(q) ||
-        item.course.toLowerCase().includes(q) ||
-        item.agentName.toLowerCase().includes(q) ||
-        item.repName.toLowerCase().includes(q) ||
-        item.intake.toLowerCase().includes(q) ||
-        payloadVal.toString().includes(q) ||
-        yieldVal.toString().includes(q);
-
-      const matchesCourse = selectedCourse === "all" || item.course === selectedCourse;
-      const matchesStatus = selectedStatus === "all" || item.status === selectedStatus;
-      const matchesMethod = selectedMethod === "all" || item.paymentMethod === selectedMethod;
-
-      // Filter by Earliest Payment date threshold (payments on or after the selected earliest payment date)
-      let matchesEarliestDate = true;
-      if (earliestPaymentDate) {
-        const threshold = new Date(earliestPaymentDate).setHours(0, 0, 0, 0);
-        const itemDate = new Date(item.date).setHours(0, 0, 0, 0);
-        if (!isNaN(threshold) && !isNaN(itemDate)) {
-          matchesEarliestDate = itemDate >= threshold;
-        }
-      }
-
-      // Filter by Period timeframe relative to reference timestamp
-      let matchesPeriod = true;
-      const itemTime = Date.parse(item.date) || 0;
-      if (selectedPeriod === "last-72-hours") {
-        matchesPeriod = itemTime >= referenceTime - 72 * 60 * 60 * 1000;
-      } else if (selectedPeriod === "last-7-days") {
-        matchesPeriod = itemTime >= referenceTime - 7 * 24 * 60 * 60 * 1000;
-      } else if (selectedPeriod === "monthly") {
-        matchesPeriod = itemTime >= referenceTime - 30 * 24 * 60 * 60 * 1000;
-      } else if (selectedPeriod === "quarterly") {
-        matchesPeriod = itemTime >= referenceTime - 90 * 24 * 60 * 60 * 1000;
-      } else if (selectedPeriod === "semi-annual") {
-        matchesPeriod = itemTime >= referenceTime - 180 * 24 * 60 * 60 * 1000;
-      } else if (selectedPeriod === "annual") {
-        matchesPeriod = itemTime >= referenceTime - 365 * 24 * 60 * 60 * 1000;
-      }
-
-      return matchesSearch && matchesCourse && matchesStatus && matchesMethod && matchesEarliestDate && matchesPeriod;
-    });
-
-    // Apply sorting (default: Earliest Payment date first)
-    return [...filtered].sort((a, b) => {
-      const dateA = Date.parse(a.date) || 0;
-      const dateB = Date.parse(b.date) || 0;
-      const payloadA = a.totalPayload ?? a.totalFee;
-      const payloadB = b.totalPayload ?? b.totalFee;
-      const yieldA = a.courseYield ?? a.totalFee - 1300;
-      const yieldB = b.courseYield ?? b.totalFee - 1300;
-
-      switch (sortBy) {
-        case "date-asc":
-          return dateA - dateB; // Earliest payment first
-        case "date-desc":
-          return dateB - dateA; // Latest payment first
-        case "payload-desc":
-          return payloadB - payloadA;
-        case "payload-asc":
-          return payloadA - payloadB;
-        case "yield-desc":
-          return yieldB - yieldA;
-        case "name-asc":
-          return a.studentName.localeCompare(b.studentName);
-        default:
-          return dateA - dateB;
-      }
-    });
-  }, [data, searchQuery, selectedCourse, selectedStatus, selectedMethod, earliestPaymentDate, selectedPeriod, referenceTime, sortBy]);
-
-  // Aggregate Metrics calculations
-  const metrics = useMemo(() => {
-    const totalPayload = filteredData.reduce((acc, curr) => acc + (curr.totalPayload ?? curr.totalFee), 0);
-    const totalYield = filteredData.reduce((acc, curr) => acc + (curr.courseYield ?? curr.totalFee - 1300), 0);
-    const totalAncillary = filteredData.reduce((acc, curr) => acc + (curr.ancillaryFee ?? 800), 0);
-    const totalApplication = filteredData.reduce((acc, curr) => acc + (curr.applicationFee ?? 500), 0);
-    const paidCount = filteredData.filter((curr) => curr.status === "Paid").length;
-
-    return {
-      totalPayload,
-      totalYield,
-      totalAncillary,
-      totalApplication,
-      paidCount,
-      totalCount: filteredData.length,
-    };
-  }, [filteredData]);
-
-  // Program Yield Analysis Ranking
-  const programYields = useMemo(() => {
-    const courseMap: Record<
-      string,
-      {
-        course: string;
-        code: string;
-        totalStudents: number;
-        amountGross: number;
-      }
-    > = {};
-
-    filteredData.forEach((item) => {
-      const yieldAmount = item.courseYield ?? item.totalFee - 1300;
-      if (!courseMap[item.course]) {
-        courseMap[item.course] = {
-          course: item.course,
-          code: item.courseCode || "",
-          totalStudents: 0,
-          amountGross: 0,
-        };
-      }
-      courseMap[item.course].totalStudents += 1;
-      courseMap[item.course].amountGross += yieldAmount;
-    });
-
-    return Object.values(courseMap).sort((a, b) => b.amountGross - a.amountGross || b.totalStudents - a.totalStudents);
-  }, [filteredData]);
+  const filteredData = report?.data || [];
+  const metrics = report?.metrics || {totalPayload: 0, totalYield: 0, totalAncillary: 0, totalApplication: 0, paidCount: 0, totalCount: 0};
+  const programYields = useMemo(() => report?.programs || [], [report]);
 
   // Reduced motion preference
   const shouldReduceMotion = useReducedMotion();
@@ -293,15 +162,10 @@ export const PaymentReportTab: React.FC = () => {
     }
   };
 
-  // Pagination calculations
-  const totalItems = filteredData.length;
+  const totalItems = report?.total || 0;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const validCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
-
-  const paginatedData = useMemo(() => {
-    const start = (validCurrentPage - 1) * pageSize;
-    return filteredData.slice(start, start + pageSize);
-  }, [filteredData, validCurrentPage, pageSize]);
+  const validCurrentPage = currentPage;
+  const paginatedData = filteredData;
 
   // Check if any filter is active
   const hasActiveFilters =
@@ -438,7 +302,7 @@ export const PaymentReportTab: React.FC = () => {
         className: "border-r border-brand-border/40 text-right whitespace-nowrap",
         headerClassName: "text-right",
         cell: (item) => {
-          const yieldVal = item.courseYield ?? item.totalFee - 1300;
+          const yieldVal = item.courseYield ?? 0;
           return (
             <div className="flex flex-col items-end">
               <div className="font-mono text-xs font-bold text-emerald-700">
@@ -458,7 +322,7 @@ export const PaymentReportTab: React.FC = () => {
         className: "border-r border-brand-border/40 text-right whitespace-nowrap",
         headerClassName: "text-right",
         cell: (item) => {
-          const appFee = item.applicationFee ?? 500;
+          const appFee = item.applicationFee ?? 0;
           return (
             <div className="flex flex-col items-end">
               <div className="font-mono text-xs font-semibold text-text-primary">
@@ -478,7 +342,7 @@ export const PaymentReportTab: React.FC = () => {
         className: "border-r border-brand-border/40 text-right whitespace-nowrap",
         headerClassName: "text-right",
         cell: (item) => {
-          const ancFee = item.ancillaryFee ?? 800;
+          const ancFee = item.ancillaryFee ?? 0;
           return (
             <div className="flex flex-col items-end">
               <div className="font-mono text-xs font-semibold text-text-primary">
@@ -534,6 +398,8 @@ export const PaymentReportTab: React.FC = () => {
     ],
     [validCurrentPage, pageSize],
   );
+
+  if ((!report && loading) || error || options.error) return <AsyncStateView isLoading={loading} error={error || options.error} onRetry={() => { void reload(); void options.reload(); }}>{null}</AsyncStateView>;
 
   return (
     <div className="space-y-4">
@@ -851,7 +717,7 @@ export const PaymentReportTab: React.FC = () => {
         />
 
         {/* 4. Pagination */}
-        {filteredData.length > 0 && (
+        {totalItems > 0 && (
           <div className="shadow-xs rounded-2xl border border-brand-border bg-white px-4 py-3">
             <Pagination
               currentPage={validCurrentPage}

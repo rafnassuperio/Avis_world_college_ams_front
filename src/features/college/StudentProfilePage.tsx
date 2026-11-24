@@ -23,12 +23,15 @@ import BreadcrumbBanner from "@/components/common/BreadcrumbBanner";
 import { Button } from "@/components/ui/Button";
 import { DeleteModal } from "@/components/ui/DeleteModal";
 import { toast } from "@/components/common/ToastMessage";
-import { safeStorage } from "@/lib/security";
+import { apiClient } from "@/services/api/apiClient";
+import { students, mapStudent, apiMessage } from "@/services/ams";
+import { useApiQuery } from "@/hooks/useApiQuery";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { cn } from "@/lib/utils";
 import { dashboardContainerVariants, dashboardSectionVariants } from "@/components/animations/transitions";
 import { CollegeStudent } from "./types";
-import { initialStudentsData } from "./data/collegeTabData";
-import { defaultStudentProfile, StudentDriveLink } from "./data/defaultStudentProfile";
+
+
 import {
   StudentProfileHeader,
   StudentInfoCard,
@@ -43,7 +46,7 @@ import {
   InfoFieldItem,
 } from "./components/student-profile";
 
-const STORAGE_KEY = "ams_college_students_list";
+
 
 type TabViewId = "overview" | "academics" | "personal" | "attendance" | "fees" | "documents" | "contracts";
 
@@ -69,42 +72,21 @@ export const StudentProfilePage: React.FC = () => {
     return rawId;
   }, [params]);
 
-  // Load students list from persistent storage
-  const [studentsList, setStudentsList] = useState<CollegeStudent[]>(() => {
-    return safeStorage.getItem<CollegeStudent[]>(STORAGE_KEY, initialStudentsData);
-  });
-
-  // Find targeted student or default to standard student profile
-  const matchedStudent = useMemo(() => {
-    if (!routeStudentId) return defaultStudentProfile;
-    const lowerTarget = routeStudentId.toLowerCase().trim();
-    const decodedTarget = decodeURIComponent(routeStudentId).toLowerCase().trim();
-
-    const found = studentsList.find((s) => {
-      const sId = (s.studentId || "").toLowerCase().trim();
-      const dbId = (s.id || "").toLowerCase().trim();
-      return sId === lowerTarget || sId === decodedTarget || dbId === lowerTarget || dbId === decodedTarget;
-    });
-
-    if (found) return found;
-
-    // Fallback: check if target matches default student
-    if (lowerTarget.includes("atcg624") || lowerTarget.includes("misriya") || decodedTarget.includes("atcg624")) {
-      return defaultStudentProfile;
+  const { data: matchedStudent, loading, error, reload } = useApiQuery(async () => {
+    let id = routeStudentId;
+    if (!/^[a-f0-9]{24}$/i.test(id)) {
+      const list = await students.list();
+      const found = list.find(s => s.studentId === decodeURIComponent(id));
+      if (!found) throw new Error("Student not found.");
+      id = found.id;
     }
-
-    return defaultStudentProfile;
-  }, [studentsList, routeStudentId]);
-
-  // Active student state
-  const [currentStudent, setCurrentStudent] = useState<CollegeStudent>(matchedStudent);
-
-  // Sync state if matched student changes externally
-  useEffect(() => {
-    if (matchedStudent) {
-      setCurrentStudent(matchedStudent);
-    }
-  }, [matchedStudent]);
+    const response = await apiClient.get<{ student: Record<string, any> }>(`/api/admin/student/${encodeURIComponent(id)}`);
+    const summary = await apiClient.get<Record<string, any>>(`/api/admin/dashboard/student-summary/${id}`);
+    return { ...mapStudent(response.student), attendanceCount: summary.attendancePercentage == null ? undefined : summary.attendancePercentage + "%", leaveCount: summary.approvedLeaves + summary.pendingLeaves, performanceCount: summary.grade || undefined };
+  }, [routeStudentId]);
+  const [currentStudent, setCurrentStudent] = useState<CollegeStudent>({ id: "", studentId: "", name: "", avatar: "", email: "", phone: "", course: "", courseCode: "", category: "", intake: "", status: "", nationality: "", joinedDate: "" });
+  const studentsList = matchedStudent ? [matchedStudent] : [];
+  useEffect(() => { if (matchedStudent) setCurrentStudent(matchedStudent); }, [matchedStudent]);
 
   // Modal visibility states
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -112,66 +94,28 @@ export const StudentProfilePage: React.FC = () => {
   const [isAddDriveLinkModalOpen, setIsAddDriveLinkModalOpen] = useState(false);
   const [isProgressiveCourseModalOpen, setIsProgressiveCourseModalOpen] = useState(false);
 
-  // Helper to persist student changes to storage
-  const persistStudent = useCallback(
-    (updated: CollegeStudent) => {
-      setCurrentStudent(updated);
-
-      const existsInList = studentsList.some((s) => s.id === updated.id || s.studentId === updated.studentId);
-
-      let newList: CollegeStudent[];
-      if (existsInList) {
-        newList = studentsList.map((s) => (s.id === updated.id || s.studentId === updated.studentId ? updated : s));
-      } else {
-        newList = [updated, ...studentsList];
-      }
-
-      setStudentsList(newList);
-      safeStorage.setItem(STORAGE_KEY, newList);
-      window.dispatchEvent(new Event("ams_students_updated"));
-    },
-    [studentsList],
-  );
+  const persistStudent = useCallback(async (updated: CollegeStudent) => {
+    try {
+      await students.save(updated, false);
+      await reload();
+      toast.success("Student profile saved.");
+    } catch (error) { toast.error("Unable to update student", { description: apiMessage(error) }); return false; }
+  }, [reload]);
 
   // Status Change Handler
-  const handleStatusChange = (newStatus: string) => {
-    const updated: CollegeStudent = {
-      ...currentStudent,
-      status: newStatus,
-      editedAt: new Date().toLocaleString("en-US", {
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      }),
-    };
-    persistStudent(updated);
-    toast.success(`Student status changed to "${newStatus}"`);
+  const handleStatusChange = async (status: string) => {
+    try { await apiClient.put(`/api/admin/update-status/${currentStudent.id}`, { status }); await reload(); toast.success("Student status updated."); }
+    catch (error) { toast.error("Unable to change status", { description: apiMessage(error) }); }
   };
 
   // Progressive Course Type Change Handler
-  const handleSaveProgressiveCourse = (newCourseType: string) => {
-    const updated: CollegeStudent = {
-      ...currentStudent,
-      courseType: newCourseType,
-      editedAt: new Date().toLocaleString("en-US", {
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      }),
-    };
-    persistStudent(updated);
-    setIsProgressiveCourseModalOpen(false);
-    toast.success(`Course type updated to "${newCourseType}"`);
+  const handleSaveProgressiveCourse = async (_newCourseType: string) => {
+    toast.info("Select the destination course and payment scheme in Edit Student before changing enrollment. The upgrade API requires those details.");
+    return false;
   };
 
   // Avatar Image Change Handler
-  const handleAvatarChange = (newUrl: string) => {
+  const handleAvatarChange = async (newUrl: string) => {
     const updated: CollegeStudent = {
       ...currentStudent,
       avatar: newUrl,
@@ -184,58 +128,23 @@ export const StudentProfilePage: React.FC = () => {
         hour12: true,
       }),
     };
-    persistStudent(updated);
+    if (await persistStudent(updated) === false) return false;
   };
 
   // Delete Student Handler
-  const handleConfirmDelete = () => {
-    const filteredList = studentsList.filter((s) => s.id !== currentStudent.id && s.studentId !== currentStudent.studentId);
-    setStudentsList(filteredList);
-    safeStorage.setItem(STORAGE_KEY, filteredList);
-    window.dispatchEvent(new Event("ams_students_updated"));
-    setIsDeleteModalOpen(false);
-    toast.success(`Student "${currentStudent.name}" (${currentStudent.studentId}) was deleted`);
-    navigate("/college");
+  const handleConfirmDelete = async () => {
+    try { await students.remove(currentStudent.id); setIsDeleteModalOpen(false); navigate("/college"); }
+    catch (error) { toast.error("Unable to delete student", { description: apiMessage(error) }); return false; }
   };
 
   // Add Google Drive Link Handler
-  const handleAddDriveLink = (newLink: { title: string; url: string; category?: string }) => {
-    const links = currentStudent.googleDriveLinks || [];
-    const createdLink: StudentDriveLink = {
-      id: `gdrive-${Date.now()}`,
-      title: newLink.title,
-      url: newLink.url,
-      category: newLink.category || "General",
-      addedDate: new Date().toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }),
-    };
-    const updated: CollegeStudent = {
-      ...currentStudent,
-      googleDriveLinks: [...links, createdLink],
-      editedAt: new Date().toLocaleString("en-US", {
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      }),
-    };
-    persistStudent(updated);
+  const handleAddDriveLink = async (link: { title: string; url: string; category?: string }) => {
+    try { await apiClient.post(`/api/admin/add-document/${currentStudent.id}`, { name: link.title, url: link.url, type: link.category || "General" }); await reload(); }
+    catch (error) { toast.error("Unable to add link", { description: apiMessage(error) }); return false; }
   };
-
-  // Remove Google Drive Link Handler
-  const handleRemoveDriveLink = (linkId: string) => {
-    const links = currentStudent.googleDriveLinks || [];
-    const updated: CollegeStudent = {
-      ...currentStudent,
-      googleDriveLinks: links.filter((l) => l.id !== linkId),
-    };
-    persistStudent(updated);
-    toast.info("Google Drive link removed");
+  const handleRemoveDriveLink = async (id: string) => {
+    try { await apiClient.delete(`/api/admin/delete-document/${currentStudent.id}/${id}`); await reload(); }
+    catch (error) { toast.error("Unable to remove link", { description: apiMessage(error) }); }
   };
 
   // Format currency
@@ -254,30 +163,30 @@ export const StudentProfilePage: React.FC = () => {
   const academicFields: InfoFieldItem[] = [
     {
       label: "College",
-      value: currentStudent.college || "Acetek College",
+      value: currentStudent.college || "—",
       badgeVariant: "brand",
     },
     {
       label: "Intake",
-      value: currentStudent.intake || "January",
+      value: currentStudent.intake || "—",
     },
     {
       label: "Intake Name",
-      value: currentStudent.intakeName || "HDIT2601",
+      value: currentStudent.intakeName || "—",
       isMono: true,
       isCopyable: true,
     },
     {
       label: "Course",
-      value: currentStudent.course || "HIGHER DIPLOMA IN IT",
-      badgeText: currentStudent.courseCode || "HDIT",
+      value: currentStudent.course || "—",
+      badgeText: currentStudent.courseCode || "—",
       badgeVariant: "brand",
       colSpan: 2,
     },
     {
       label: "Course Type",
-      value: currentStudent.courseType || "Higher Diploma",
-      badgeText: currentStudent.courseType || "Higher Diploma",
+      value: currentStudent.courseType || "—",
+      badgeText: currentStudent.courseType || "—",
       badgeVariant: "brand",
     },
     {
@@ -286,7 +195,7 @@ export const StudentProfilePage: React.FC = () => {
     },
     {
       label: "Highest Academic Qualification",
-      value: currentStudent.highestQualification || "OTHER POST-SECONDARY CERTIFICATES",
+      value: currentStudent.highestQualification || "—",
       colSpan: 2,
     },
     {
@@ -295,7 +204,7 @@ export const StudentProfilePage: React.FC = () => {
     },
     {
       label: "PE Course Title",
-      value: currentStudent.peCourseTitle || "Diploma in Culinary and Baking",
+      value: currentStudent.peCourseTitle || "—",
       colSpan: 2,
     },
     {
@@ -304,13 +213,13 @@ export const StudentProfilePage: React.FC = () => {
     },
     {
       label: "Course Commencement Date",
-      value: currentStudent.commencementDate || "05/01/2026",
+      value: currentStudent.commencementDate || "—",
       isMono: true,
       icon: Calendar,
     },
     {
       label: "Course Completion Date",
-      value: currentStudent.completionDate || "05/06/2026",
+      value: currentStudent.completionDate || "—",
       isMono: true,
       icon: Calendar,
     },
@@ -361,8 +270,8 @@ export const StudentProfilePage: React.FC = () => {
     },
     {
       label: "Payment Status",
-      value: currentStudent.paymentStatus || "pending",
-      badgeText: (currentStudent.paymentStatus || "pending").toUpperCase(),
+      value: currentStudent.paymentStatus || "—",
+      badgeText: (currentStudent.paymentStatus || "—").toUpperCase(),
       badgeVariant: currentStudent.paymentStatus === "paid" ? "emerald" : currentStudent.paymentStatus === "partial" ? "amber" : "rose",
     },
   ];
@@ -371,11 +280,11 @@ export const StudentProfilePage: React.FC = () => {
   const repFields: InfoFieldItem[] = [
     {
       label: "Representative",
-      value: currentStudent.representative || "NONE",
+      value: currentStudent.representative || "—",
     },
     {
       label: "Agent",
-      value: currentStudent.agent || "TEMP AGENT",
+      value: currentStudent.agent || "—",
       badgeText: "Authorized Agency",
       badgeVariant: "neutral",
     },
@@ -385,7 +294,7 @@ export const StudentProfilePage: React.FC = () => {
   const guardianFields: InfoFieldItem[] = [
     {
       label: "Name",
-      value: currentStudent.guardianName || "none",
+      value: currentStudent.guardianName || "—",
     },
     {
       label: "NRIC",
@@ -399,7 +308,7 @@ export const StudentProfilePage: React.FC = () => {
   const studentInfoFields: InfoFieldItem[] = [
     {
       label: "Student ID",
-      value: currentStudent.studentId || "ATCG624/09/001",
+      value: currentStudent.studentId || "—",
       isMono: true,
       isCopyable: true,
       badgeText: "Primary ID",
@@ -407,8 +316,8 @@ export const StudentProfilePage: React.FC = () => {
     },
     {
       label: "Passport",
-      value: currentStudent.passportNo || currentStudent.passportOrNric || "MDFJHFCVFC",
-      rawValue: currentStudent.passportNo || currentStudent.passportOrNric || "MDFJHFCVFC",
+      value: currentStudent.passportNo || currentStudent.passportOrNric || "—",
+      rawValue: currentStudent.passportNo || currentStudent.passportOrNric || "—",
       isMono: true,
       isCopyable: true,
     },
@@ -419,23 +328,23 @@ export const StudentProfilePage: React.FC = () => {
     },
     {
       label: "Date of Birth",
-      value: currentStudent.dateOfBirth || "05/09/2000",
+      value: currentStudent.dateOfBirth || "—",
       isMono: true,
       icon: Calendar,
     },
     {
       label: "Gender",
-      value: currentStudent.gender || "Male",
+      value: currentStudent.gender || "—",
     },
     {
       label: "Nationality",
-      value: currentStudent.nationality || "Indian",
-      badgeText: currentStudent.country || "India",
+      value: currentStudent.nationality || "—",
+      badgeText: currentStudent.country || "—",
       badgeVariant: "neutral",
     },
     {
       label: "Address",
-      value: currentStudent.address || "DCFVGBHNJKL./",
+      value: currentStudent.address || "—",
       colSpan: 2,
     },
     {
@@ -444,13 +353,13 @@ export const StudentProfilePage: React.FC = () => {
     },
     {
       label: "Student Type",
-      value: currentStudent.studentType || "International",
+      value: currentStudent.studentType || "—",
       badgeText: "Overseas Matriculant",
       badgeVariant: "brand",
     },
     {
       label: "FIN No / Student Pass Holder",
-      value: currentStudent.finNumber || "MERDFFB",
+      value: currentStudent.finNumber || "—",
       isMono: true,
       isCopyable: true,
     },
@@ -482,13 +391,13 @@ export const StudentProfilePage: React.FC = () => {
       label: "Singapore Phone Number",
       value: (
         <a
-          href={`tel:${currentStudent.singaporePhone || currentStudent.phone || "9562941863"}`}
+          href={`tel:${currentStudent.singaporePhone || currentStudent.phone || "—"}`}
           className="font-mono text-text-primary hover:text-burgundy-primary"
         >
-          {currentStudent.singaporePhone || currentStudent.phone || "9562941863"}
+          {currentStudent.singaporePhone || currentStudent.phone || "—"}
         </a>
       ),
-      rawValue: currentStudent.singaporePhone || currentStudent.phone || "9562941863",
+      rawValue: currentStudent.singaporePhone || currentStudent.phone || "—",
       isCopyable: true,
       icon: Phone,
     },
@@ -501,13 +410,13 @@ export const StudentProfilePage: React.FC = () => {
       label: "E-Mail",
       value: (
         <a
-          href={`mailto:${currentStudent.email || "misriyasalim6@gmail.com"}`}
+          href={`mailto:${currentStudent.email || "—"}`}
           className="font-mono text-burgundy-primary hover:underline"
         >
-          {currentStudent.email || "misriyasalim6@gmail.com"}
+          {currentStudent.email || "—"}
         </a>
       ),
-      rawValue: currentStudent.email || "misriyasalim6@gmail.com",
+      rawValue: currentStudent.email || "—",
       isCopyable: true,
       icon: Mail,
       colSpan: 3,
@@ -609,6 +518,8 @@ export const StudentProfilePage: React.FC = () => {
         exit: { opacity: 0, y: -8, scale: 0.995 },
         transition: { duration: 0.24, ease: [0.16, 1, 0.3, 1] },
       };
+
+  if (loading || error || !matchedStudent) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
 
   return (
     <motion.div
@@ -905,7 +816,7 @@ export const StudentProfilePage: React.FC = () => {
                           : "border-burgundy-primary/20 bg-burgundy-primary/10 text-burgundy-primary",
                     )}
                   >
-                    {currentStudent.paymentStatus || "pending"}
+                    {currentStudent.paymentStatus || "—"}
                   </span>
                 </div>
 
@@ -1075,7 +986,7 @@ export const StudentProfilePage: React.FC = () => {
               <div className="shadow-xs rounded-2xl border border-rose-200 bg-gradient-to-br from-rose-50/50 via-white to-white p-5">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-rose-800">Pending Amount</span>
                 <div className="mt-2 font-mono text-2xl font-extrabold text-rose-950">{formatCurrency(pendingAmountNum)}</div>
-                <div className="mt-1 text-xs font-medium text-rose-700">Status: {(currentStudent.paymentStatus || "pending").toUpperCase()}</div>
+                <div className="mt-1 text-xs font-medium text-rose-700">Status: {(currentStudent.paymentStatus || "—").toUpperCase()}</div>
               </div>
             </div>
 
@@ -1092,7 +1003,7 @@ export const StudentProfilePage: React.FC = () => {
                         : "border-burgundy-primary/20 bg-burgundy-primary/10 text-burgundy-primary",
                   )}
                 >
-                  {currentStudent.paymentStatus || "pending"}
+                  {currentStudent.paymentStatus || "—"}
                 </span>
               </div>
               <div className="mt-4">
@@ -1207,7 +1118,7 @@ export const StudentProfilePage: React.FC = () => {
         <ProgressiveCourseModal
           isOpen={isProgressiveCourseModalOpen}
           onClose={() => setIsProgressiveCourseModalOpen(false)}
-          currentCourseType={currentStudent.courseType || "Higher Diploma"}
+          currentCourseType={currentStudent.courseType || "—"}
           studentName={currentStudent.name}
           onSave={handleSaveProgressiveCourse}
         />

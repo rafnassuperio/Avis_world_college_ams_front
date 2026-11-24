@@ -1,4 +1,5 @@
-import React, { useState, useRef, useMemo } from "react";
+import { useAdmissionOptions } from "@/hooks/useAdmissionOptions";
+import React, { useState, useRef, useMemo, useEffect } from "react";
 import {
   User,
   GraduationCap,
@@ -31,7 +32,7 @@ export interface CountryItem {
 export interface AddStudentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddStudent: (student: CollegeStudent) => void;
+  onAddStudent: (student: CollegeStudent) => void | boolean | Promise<void | boolean>;
   fullScreen?: boolean;
 }
 
@@ -47,178 +48,6 @@ export interface CourseCatalogItem {
   category: string;
   defaultFee: string;
 }
-
-export const COURSE_CATALOG: CourseCatalogItem[] = [
-  // Post Graduation
-  {
-    id: "pg-1",
-    code: "MSc-AAI",
-    title: "MSc Applied Artificial Intelligence",
-    level: "Post Graduation",
-    category: "School of Computing & AI",
-    defaultFee: "$14,800",
-  },
-  {
-    id: "pg-2",
-    code: "MBA-ETM",
-    title: "MBA Executive Technology Management",
-    level: "Post Graduation",
-    category: "School of Business",
-    defaultFee: "$15,000",
-  },
-  {
-    id: "pg-3",
-    code: "MSc-DS",
-    title: "Master of Science in Data Science",
-    level: "Post Graduation",
-    category: "School of Computing & AI",
-    defaultFee: "$14,200",
-  },
-  {
-    id: "pg-4",
-    code: "MSc-CYBER",
-    title: "Master of Science in Cybersecurity & Threat Intelligence",
-    level: "Post Graduation",
-    category: "School of Computing & AI",
-    defaultFee: "$14,500",
-  },
-
-  // Higher Diploma
-  {
-    id: "hd-1",
-    code: "HD-DA",
-    title: "Higher Diploma in Data Analytics & Machine Learning",
-    level: "Higher Diploma",
-    category: "School of Computing & AI",
-    defaultFee: "$8,500",
-  },
-  {
-    id: "hd-2",
-    code: "HD-SE",
-    title: "Higher Diploma in Software Engineering",
-    level: "Higher Diploma",
-    category: "School of Computing & AI",
-    defaultFee: "$8,200",
-  },
-  {
-    id: "hd-3",
-    code: "HD-HT",
-    title: "Higher Diploma in International Hospitality Management",
-    level: "Higher Diploma",
-    category: "School of Hospitality",
-    defaultFee: "$7,900",
-  },
-  {
-    id: "hd-4",
-    code: "HD-DM",
-    title: "Higher Diploma in Digital Marketing & Growth Strategy",
-    level: "Higher Diploma",
-    category: "School of Business",
-    defaultFee: "$7,600",
-  },
-
-  // Diploma
-  {
-    id: "dip-1",
-    code: "Dip-BA",
-    title: "Diploma in Business Administration",
-    level: "Diploma",
-    category: "School of Business",
-    defaultFee: "$5,800",
-  },
-  {
-    id: "dip-2",
-    code: "Dip-IM",
-    title: "Diploma in Interactive Media & UX Design",
-    level: "Diploma",
-    category: "School of Design",
-    defaultFee: "$6,000",
-  },
-  {
-    id: "dip-3",
-    code: "Dip-IT",
-    title: "Diploma in Information Technology",
-    level: "Diploma",
-    category: "School of Computing & AI",
-    defaultFee: "$5,500",
-  },
-  {
-    id: "dip-4",
-    code: "Dip-CA",
-    title: "Diploma in Culinary Arts & Operations",
-    level: "Diploma",
-    category: "School of Hospitality",
-    defaultFee: "$5,400",
-  },
-
-  // Certificate
-  {
-    id: "cert-1",
-    code: "Cert-CA",
-    title: "Certificate in Cloud Architecture & DevOps",
-    level: "Certificate",
-    category: "School of Computing & AI",
-    defaultFee: "$2,800",
-  },
-  {
-    id: "cert-2",
-    code: "Cert-DM",
-    title: "Certificate in Digital Marketing & SEO",
-    level: "Certificate",
-    category: "School of Business",
-    defaultFee: "$2,400",
-  },
-  {
-    id: "cert-3",
-    code: "Cert-PY",
-    title: "Certificate in Python & AI Fundamentals",
-    level: "Certificate",
-    category: "School of Computing & AI",
-    defaultFee: "$2,600",
-  },
-  {
-    id: "cert-4",
-    code: "Cert-BE",
-    title: "Certificate in Executive Business English",
-    level: "Certificate",
-    category: "School of Business",
-    defaultFee: "$1,800",
-  },
-];
-
-// Payment schemes
-export const PAYMENT_SCHEMES = [
-  "Standard Scheme (Full Tuition)",
-  "Early Bird Scheme (5% Waiver)",
-  "Subsidized Local Scheme",
-  "Merit Scholarship Scheme (25% Grant)",
-  "Corporate Sponsored Scheme",
-  "Self-Financed Installment Scheme",
-];
-
-// Partner Agencies
-export const AGENTS_LIST = [
-  "Direct / No Agent",
-  "EduGlobal Overseas Partners",
-  "Apex Study Pathways",
-  "Global Gateway Admissions",
-  "Beacon International Consultants",
-  "SingaEdu Consultancies Ltd",
-  "Avis Direct Campus Outreach",
-];
-
-// Institutional Representatives
-export const REPRESENTATIVES_LIST = [
-  "Dr. Sarah Jenkins (Senior Admissions Counselor)",
-  "Michael Wong (Regional Lead - Asia Pacific)",
-  "Amara Patel (International Enrollment Officer)",
-  "David Ndlovu (Africa & Middle East Representative)",
-  "Elena Rostov (European Student Counselor)",
-  "Admissions Office General Pool",
-];
-
-// Cohort Intake Names
-export const INTAKE_NAMES = ["Spring 2026 Cohort", "Summer 2026 Cohort", "Fall 2026 Cohort", "Winter 2025 Cohort", "Spring 2027 Cohort"];
 
 // Intake Months
 export const INTAKE_MONTHS = [
@@ -265,25 +94,26 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClos
 
   // 2. Education Information
   const [courseType, setCourseType] = useState<(typeof COURSE_TYPES)[number]>("Post Graduation");
-  const [courseTitle, setCourseTitle] = useState<string>("MSc Applied Artificial Intelligence");
-  const [coursePaymentScheme, setCoursePaymentScheme] = useState<string>(PAYMENT_SCHEMES[0]);
+  const [courseTitle, setCourseTitle] = useState<string>("");
+  const { COURSE_CATALOG, PAYMENT_SCHEMES, AGENTS_LIST, REPRESENTATIVES_LIST, INTAKE_NAMES, paymentSchemeOptions, schemes, selectedCourseType, loading: optionsLoading, error: optionsError } = useAdmissionOptions(courseTitle);
+  const [coursePaymentScheme, setCoursePaymentScheme] = useState<string>(PAYMENT_SCHEMES[0] || "");
 
   // 3. Agents and Representatives
-  const [agent, setAgent] = useState<string>(AGENTS_LIST[0]);
-  const [representative, setRepresentative] = useState<string>(REPRESENTATIVES_LIST[0]);
+  const [agent, setAgent] = useState<string>(AGENTS_LIST[0] || "");
+  const [representative, setRepresentative] = useState<string>(REPRESENTATIVES_LIST[0] || "");
 
   // 4. Intake Information
-  const [intakeName, setIntakeName] = useState<string>(INTAKE_NAMES[0]);
+  const [intakeName, setIntakeName] = useState<string>(INTAKE_NAMES[0] || "");
   const [intakeMonth, setIntakeMonth] = useState<string>("January");
-  const [intakeDate, setIntakeDate] = useState<string>("2026-01-15");
-  const [finalExamResultDate, setFinalExamResultDate] = useState<string>("2026-06-20");
-  const [confermentDate, setConfermentDate] = useState<string>("2026-07-15");
-  const [completionDate, setCompletionDate] = useState<string>("2026-08-01");
-  const [enrollmentDate, setEnrollmentDate] = useState<string>("2026-01-15");
+  const [intakeDate, setIntakeDate] = useState<string>("");
+  const [finalExamResultDate, setFinalExamResultDate] = useState<string>("");
+  const [confermentDate, setConfermentDate] = useState<string>("");
+  const [completionDate, setCompletionDate] = useState<string>("");
+  const [enrollmentDate, setEnrollmentDate] = useState<string>("");
 
   // 5. Payment Information
   const [discount, setDiscount] = useState<string>("");
-  const [totalCourseAmount, setTotalCourseAmount] = useState<string>("$14,800");
+  const [totalCourseAmount, setTotalCourseAmount] = useState<string>("");
   const [paymentMethod, setPaymentMethod] = useState<"One Time Settlement" | "Installment">("One Time Settlement");
 
   // 6. Additional Information
@@ -328,6 +158,17 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClos
     }
   };
 
+  useEffect(() => {
+    if (!courseTitle && COURSE_CATALOG.length) setCourseTitle(COURSE_CATALOG.find(c => c.level === courseType)?.title || COURSE_CATALOG[0].title);
+    if (!PAYMENT_SCHEMES.includes(coursePaymentScheme)) setCoursePaymentScheme(PAYMENT_SCHEMES[0] || "");
+  }, [COURSE_CATALOG, PAYMENT_SCHEMES, courseTitle, coursePaymentScheme, courseType]);
+
+  useEffect(() => {
+    if (selectedCourseType && COURSE_TYPES.includes(selectedCourseType as typeof COURSE_TYPES[number])) setCourseType(selectedCourseType as typeof COURSE_TYPES[number]);
+  }, [selectedCourseType]);
+  const selectedSchemeAmount = schemes.find(s => s.id === coursePaymentScheme)?.totalFee;
+  useEffect(() => { if (selectedSchemeAmount != null) setTotalCourseAmount(String(selectedSchemeAmount)); }, [selectedSchemeAmount, coursePaymentScheme]);
+
   // Image upload handling
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -355,6 +196,7 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClos
   // Form validation
   const validateForm = (): boolean => {
     const errs: Record<string, string> = {};
+    if (optionsLoading || optionsError) { errs.courseTitle = optionsError || "Course options are still loading."; setErrors(errs); return false; }
 
     if (!fullName.trim()) {
       errs.fullName = "Full name is required";
@@ -392,7 +234,7 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClos
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) {
       return;
@@ -410,8 +252,8 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClos
 
       // Build email and phone if not manually filled
       const sanitizedName = sanitizeInput(fullName);
-      const generatedEmail = email.trim() || `${sanitizedName.toLowerCase().replace(/[^a-z0-9]/g, ".") || "student"}@avisworld.edu`;
-      const generatedPhone = phone.trim() || "+230 5" + Math.floor(1000000 + Math.random() * 9000000);
+      const generatedEmail = email.trim();
+      const generatedPhone = phone.trim();
 
       const formattedEnrollmentDate = formatDisplayDate(enrollmentDate);
       const formattedIntakeDate = formatDisplayDate(intakeDate);
@@ -426,7 +268,7 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClos
       const newStudent: CollegeStudent = {
         id: `std-${Date.now()}`,
         studentId: newStudentId,
-        name: `${salutation}. ${sanitizedName}`,
+        name: sanitizedName,
         avatar: studentImage || "",
         email: generatedEmail,
         phone: generatedPhone,
@@ -466,7 +308,7 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClos
         address: sanitizeInput(address),
       };
 
-      onAddStudent(newStudent);
+      if (await onAddStudent(newStudent) === false) return;
       handleResetForm();
       onClose();
     } finally {
@@ -486,19 +328,19 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClos
     setIdNumber("");
     setDateOfBirth("");
     setCourseType("Post Graduation");
-    setCourseTitle("MSc Applied Artificial Intelligence");
-    setCoursePaymentScheme(PAYMENT_SCHEMES[0]);
-    setAgent(AGENTS_LIST[0]);
-    setRepresentative(REPRESENTATIVES_LIST[0]);
-    setIntakeName(INTAKE_NAMES[0]);
+    setCourseTitle("");
+    setCoursePaymentScheme(PAYMENT_SCHEMES[0] || "");
+    setAgent(AGENTS_LIST[0] || "");
+    setRepresentative(REPRESENTATIVES_LIST[0] || "");
+    setIntakeName(INTAKE_NAMES[0] || "");
     setIntakeMonth("January");
-    setIntakeDate("2026-01-15");
-    setFinalExamResultDate("2026-06-20");
-    setConfermentDate("2026-07-15");
-    setCompletionDate("2026-08-01");
-    setEnrollmentDate("2026-01-15");
+    setIntakeDate("");
+    setFinalExamResultDate("");
+    setConfermentDate("");
+    setCompletionDate("");
+    setEnrollmentDate("");
     setDiscount("");
-    setTotalCourseAmount("$14,800");
+    setTotalCourseAmount("");
     setPaymentMethod("One Time Settlement");
     setCountry("Singapore");
     setAddress("");
@@ -834,7 +676,7 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClos
                   label="Course Payment Scheme"
                   required
                   value={coursePaymentScheme}
-                  options={PAYMENT_SCHEMES.map((scheme) => ({ label: scheme, value: scheme }))}
+                  options={paymentSchemeOptions}
                   onChange={setCoursePaymentScheme}
                   buttonClassName="bg-white border-brand-border py-2 px-3 text-xs rounded-xl"
                   menuClassName="w-full min-w-full max-w-none"
@@ -1165,7 +1007,7 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClos
               type="submit"
               variant="primary"
               size="sm"
-              disabled={isSubmitting}
+              disabled={isSubmitting || optionsLoading}
               className="gap-1.5 bg-burgundy-hover text-xs font-semibold text-white shadow-md shadow-burgundy-hover/20 hover:bg-burgundy-light"
             >
               <CheckCircle2 className="h-3.5 w-3.5" />

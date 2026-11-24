@@ -10,7 +10,7 @@ export interface EditInstituteModalProps {
   isOpen: boolean;
   onClose: () => void;
   institute: InstituteItem | null;
-  onSave: (updatedInstitute: InstituteItem) => void;
+  onSave: (updatedInstitute: InstituteItem) => void | boolean | Promise<void | boolean>;
 }
 
 const CATEGORY_OPTIONS: DropdownOption[] = [
@@ -103,7 +103,7 @@ export const EditInstituteModal: React.FC<EditInstituteModalProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!institute) return;
 
@@ -148,7 +148,7 @@ export const EditInstituteModal: React.FC<EditInstituteModalProps> = ({
       imageUrl: imageUrl || "/avis-emblem.png",
     };
 
-    onSave(updated);
+    if (await onSave(updated) === false) return;
     onClose();
   };
 

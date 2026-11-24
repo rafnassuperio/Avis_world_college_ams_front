@@ -14,7 +14,7 @@ export interface AvatarProps {
 export const Avatar: React.FC<AvatarProps> = ({
   src,
   alt = "Avatar",
-  name = "Vishnu Krishnakumar",
+  name = "",
   size = "md",
   showStatus = false,
   status = "online",

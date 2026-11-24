@@ -10,7 +10,8 @@ import {
 } from "recharts";
 import { Users2, Globe2, BarChart2 } from "lucide-react";
 import { Dropdown } from "@/components/ui/Dropdown";
-import { localInternationalDataByFilter } from "../data/reportsData";
+import { useAnalytics, monthsForFilter } from "@/services/analytics";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { LocalInternationalDataPoint } from "../types";
 import { cn } from "@/lib/utils";
 
@@ -71,9 +72,9 @@ export const LocalInternationalBarChart: React.FC = () => {
     { label: "By Cohort", value: "By Cohort" },
   ];
 
-  const currentData = useMemo(() => {
-    return localInternationalDataByFilter[selectedFilter] || localInternationalDataByFilter["Last 6 Months"];
-  }, [selectedFilter]);
+  const { data, loading, error, reload } = useAnalytics();
+  const currentData = monthsForFilter(data?.monthly || [], selectedFilter).map(m => ({ period: m.month, local: m.local, international: m.international, total: m.students,
+    localPercentage: m.students ? Math.round(m.local / m.students * 100) : 0, internationalPercentage: m.students ? Math.round(m.international / m.students * 100) : 0 }));
 
   const totals = useMemo(() => {
     const totalLocal = currentData.reduce((acc, curr) => acc + curr.local, 0);
@@ -83,6 +84,8 @@ export const LocalInternationalBarChart: React.FC = () => {
     const intlPct = totalAll > 0 ? 100 - localPct : 0;
     return { totalLocal, totalIntl, totalAll, localPct, intlPct };
   }, [currentData]);
+
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
 
   return (
     <div className="flex h-full flex-col justify-between rounded-[22px] border border-brand-border bg-white p-4 shadow-[0_2px_10px_-2px_rgba(87,0,31,0.03)] transition-all duration-300 hover:shadow-[0_8px_24px_-4px_rgba(87,0,31,0.06)] sm:p-5">

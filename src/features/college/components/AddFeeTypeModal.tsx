@@ -9,7 +9,7 @@ import { CourseFeeBreakdown } from "../types";
 export interface AddFeeTypeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddScheme: (scheme: CourseFeeBreakdown) => void;
+  onAddScheme: (scheme: CourseFeeBreakdown) => void | boolean | Promise<void | boolean>;
 }
 
 export const AddFeeTypeModal: React.FC<AddFeeTypeModalProps> = ({ isOpen, onClose, onAddScheme }) => {
@@ -40,7 +40,7 @@ export const AddFeeTypeModal: React.FC<AddFeeTypeModalProps> = ({ isOpen, onClos
     onClose();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!feeName.trim() || !schemeCode.trim()) {
       toast.error("Please enter a Fee Name and Scheme Code.");
@@ -62,7 +62,7 @@ export const AddFeeTypeModal: React.FC<AddFeeTypeModalProps> = ({ isOpen, onClos
       currency: "SGD",
     };
 
-    onAddScheme(newScheme);
+    if (await onAddScheme(newScheme) === false) return;
     resetForm();
     onClose();
   };

@@ -36,6 +36,8 @@ export interface ModulePermissions {
 }
 
 export interface AccessRoleModuleItem {
+  availableActions?: PermissionAction[];
+  readOnly?: boolean;
   id: string;
   name: string;
   description: string;

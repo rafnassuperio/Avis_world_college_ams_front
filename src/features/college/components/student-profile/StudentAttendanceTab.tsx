@@ -1,3 +1,7 @@
+import { useApiQuery } from "@/hooks/useApiQuery";
+import { apiClient } from "@/services/api/apiClient";
+import { Row } from "@/services/ams";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import React from "react";
 import { CalendarCheck, CalendarX, TrendingUp, ShieldCheck } from "lucide-react";
 import { CollegeStudent } from "../../types";
@@ -7,11 +11,13 @@ export interface StudentAttendanceTabProps {
 }
 
 export const StudentAttendanceTab: React.FC<StudentAttendanceTabProps> = ({ student }) => {
-  const attendanceRate = student.attendanceCount || "92%";
-  const leaveSummary = student.leaveCount || "3 Days";
-  const performanceRate = student.performanceCount || "88.5%";
-  const numericAttendance = typeof attendanceRate === "number" ? attendanceRate : parseFloat(String(attendanceRate).replace("%", "")) || 92;
-  const isIcaCompliant = numericAttendance >= 90;
+  const { data, loading, error, reload } = useApiQuery(() => apiClient.get<Row>(`/api/admin/dashboard/student-summary/${student.id}`), [student.id]);
+  const attendanceRate = data?.attendancePercentage == null ? "—" : data.attendancePercentage + "%";
+  const leaveSummary = data ? String(data.approvedLeaves + data.pendingLeaves) + " Requests" : "—";
+  const performanceRate = data?.grade || "—";
+  const numericAttendance = Number(data?.attendancePercentage || 0);
+  const isIcaCompliant = data?.attendancePercentage != null && numericAttendance >= 90;
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
 
   return (
     <div className="space-y-4">
@@ -27,7 +33,7 @@ export const StudentAttendanceTab: React.FC<StudentAttendanceTabProps> = ({ stud
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="font-mono text-3xl font-extrabold text-emerald-950">{attendanceRate}</span>
-            <span className="text-xs font-medium text-emerald-700">Present (46/50 days)</span>
+            <span className="text-xs font-medium text-emerald-700">Present ({data?.presentSessions || 0}/{data?.totalSessions || 0} sessions)</span>
           </div>
           <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-emerald-100">
             <div
@@ -50,17 +56,17 @@ export const StudentAttendanceTab: React.FC<StudentAttendanceTabProps> = ({ stud
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="font-mono text-3xl font-extrabold text-amber-950">{leaveSummary}</span>
-            <span className="text-xs font-medium text-amber-700">Total Absences</span>
+            <span className="text-xs font-medium text-amber-700">Leave requests</span>
           </div>
           <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-amber-100">
             <div
               className="h-full rounded-full bg-amber-500 transition-all duration-500"
-              style={{ width: "60%" }}
+              style={{ width: "0%" }}
             />
           </div>
           <div className="mt-3 flex items-center justify-between text-[11px] text-text-muted">
-            <span>2 Approved Medical/Personal</span>
-            <span className="font-semibold text-amber-700">1 Pending Review</span>
+            <span>{data?.approvedLeaves || 0} Approved</span>
+            <span className="font-semibold text-amber-700">{data?.pendingLeaves || 0} Pending Review</span>
           </div>
         </div>
 
@@ -74,16 +80,16 @@ export const StudentAttendanceTab: React.FC<StudentAttendanceTabProps> = ({ stud
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="font-mono text-3xl font-extrabold text-palette-midnight">{performanceRate}</span>
-            <span className="text-xs font-medium text-brand-red">Grade A · GPA 3.84</span>
+            <span className="text-xs font-medium text-brand-red">Published grade</span>
           </div>
           <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-brand-light-red/50">
             <div
               className="h-full rounded-full bg-burgundy-primary transition-all duration-500"
-              style={{ width: "88.5%" }}
+              style={{ width: "0%" }}
             />
           </div>
           <p className="mt-3 text-[11px] text-text-muted">
-            Course: {student.course} ({student.courseCode || "HDIT"})
+            Course: {student.course} ({student.courseCode || "—"})
           </p>
         </div>
       </div>
@@ -102,11 +108,11 @@ export const StudentAttendanceTab: React.FC<StudentAttendanceTabProps> = ({ stud
               <span className={`rounded-md px-2 py-0.5 text-[11px] font-bold uppercase ${
                 isIcaCompliant ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"
               }`}>
-                {isIcaCompliant ? "Fully Compliant" : "Action Required"}
+                {data?.attendancePercentage == null ? "No records" : isIcaCompliant ? "Above threshold" : "Below threshold"}
               </span>
             </div>
             <p className="mt-1 text-xs text-text-secondary leading-relaxed">
-              Under Singapore Immigration and Checkpoints Authority (ICA) guidelines, international student pass holders must maintain a minimum of 90% monthly attendance. {student.name} is currently at <span className="font-bold text-emerald-700">{attendanceRate}</span>, meeting all statutory attendance requirements for the current intake cohort ({student.intakeName || student.intake}).
+              Under Singapore Immigration and Checkpoints Authority (ICA) guidelines, international student pass holders must maintain a minimum of 90% monthly attendance. {student.name} is currently at <span className="font-bold text-emerald-700">{attendanceRate}</span>, based on recorded attendance for the current student ({student.intakeName || student.intake}).
             </p>
           </div>
         </div>

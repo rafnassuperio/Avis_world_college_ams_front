@@ -2,7 +2,7 @@ import React from "react";
 import { motion } from "framer-motion";
 import { Receipt, AlertCircle, CheckCircle2, Download } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { toast } from "@/components/common/ToastMessage";
+import { downloadPaymentReceipt } from "@/services/payments";
 import { PaymentHistoryItem } from "../../types";
 import { cn } from "@/lib/utils";
 
@@ -14,7 +14,7 @@ export interface AppFeeSettlementLedgerProps {
 
 export const AppFeeSettlementLedger: React.FC<AppFeeSettlementLedgerProps> = ({
   history,
-  studentName,
+  studentName: _studentName,
   className,
 }) => {
   const fmt = (val: number) => {
@@ -108,11 +108,7 @@ export const AppFeeSettlementLedger: React.FC<AppFeeSettlementLedgerProps> = ({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => {
-                        toast.success("Receipt Downloaded", {
-                          description: `Application fee receipt ${item.receiptNo} for ${studentName} downloaded successfully.`,
-                        });
-                      }}
+                      onClick={() => { void downloadPaymentReceipt(item.id); }}
                       className="h-7 px-2 text-xs text-burgundy-primary hover:bg-brand-light-red/50"
                       title="Download Receipt"
                     >

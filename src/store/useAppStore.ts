@@ -1,15 +1,20 @@
+import { session } from "@/services/api/session";
 import { create } from 'zustand';
 import {
-  currentUser,
-  mockNotifications,
+
+
   quickActionsData,
-  recentActivitiesData,
-} from '@/data/mockData';
+
+} from '@/data/uiConfig';
 import { NotificationItem, QuickAction, RecentActivity, UserProfile } from '@/types';
 import { safeStorage } from '@/lib/security';
 
+const currentUser: UserProfile = (session.token() ? session.user<UserProfile>() : null) || { name: "", role: "", email: "", avatarUrl: "", college: "", amsVersion: "1.0.0" };
+
+const initialNotifications: NotificationItem[] = [];
+
 const ADMIN_PROFILE_STORAGE_KEY = 'ams_admin_profile';
-const ACTIVITIES_STORAGE_KEY = 'ams_recent_activities';
+
 
 interface AppState {
   // Admin Profile state
@@ -77,7 +82,7 @@ if (typeof window !== 'undefined') {
 
 export const useAppStore = create<AppState>((set) => ({
   // Admin Profile state & persistence
-  adminProfile: safeStorage.getItem<UserProfile>(ADMIN_PROFILE_STORAGE_KEY, currentUser),
+  adminProfile: currentUser,
   updateAdminProfile: (updated) =>
     set((state) => {
       const newProfile = { ...state.adminProfile, ...updated };
@@ -130,41 +135,41 @@ export const useAppStore = create<AppState>((set) => ({
   openPWAInstall: () => set({ isPWAInstallOpen: true }),
   closePWAInstall: () => set({ isPWAInstallOpen: false }),
 
-  notifications: mockNotifications,
-  markNotificationAsRead: (id) =>
-    set((state) => ({
-      notifications: state.notifications.map((n) =>
-        n.id === id ? { ...n, isRead: true } : n
-      ),
-    })),
-  markAllNotificationsAsRead: () =>
-    set((state) => ({
-      notifications: state.notifications.map((n) => ({ ...n, isRead: true })),
-    })),
+  notifications: initialNotifications,
+  markNotificationAsRead: async (id) => {
+    try {
+      const { apiClient } = await import("@/services/api/apiClient");
+      await apiClient.patch(`/lms-api/notifications/read/${id}`);
+      set(state => ({ notifications: state.notifications.map(n => n.id === id ? { ...n, isRead: true } : n) }));
+    } catch { const { toast } = await import("@/components/common/ToastMessage"); toast.error("Unable to mark notification as read."); }
+  },
+  markAllNotificationsAsRead: async () => {
+    try {
+      const { tokenClaims } = await import("@/services/api/session");
+      const adminId = tokenClaims(session.token())?.adminId;
+      if (!adminId) return;
+      const { apiClient } = await import("@/services/api/apiClient");
+      await apiClient.patch(`/lms-api/notifications/read-all/${adminId}`);
+      set(state => ({ notifications: state.notifications.map(n => ({ ...n, isRead: true })) }));
+    } catch { const { toast } = await import("@/components/common/ToastMessage"); toast.error("Unable to mark notifications as read."); }
+  },
 
-  activities: safeStorage.getItem<RecentActivity[]>(ACTIVITIES_STORAGE_KEY, recentActivitiesData),
+  activities: [],
   quickActions: quickActionsData,
   addActivity: (activity) =>
     set((state) => {
       const updated = [activity, ...state.activities];
-      safeStorage.setItem(ACTIVITIES_STORAGE_KEY, updated);
       return { activities: updated };
     }),
   removeActivity: (id) =>
     set((state) => {
       const updated = state.activities.filter((act) => act.id !== id);
-      safeStorage.setItem(ACTIVITIES_STORAGE_KEY, updated);
       return { activities: updated };
     }),
   clearActivities: () =>
     set(() => {
-      safeStorage.setItem(ACTIVITIES_STORAGE_KEY, []);
       return { activities: [] };
     }),
-  resetActivities: () =>
-    set(() => {
-      safeStorage.setItem(ACTIVITIES_STORAGE_KEY, recentActivitiesData);
-      return { activities: recentActivitiesData };
-    }),
+  resetActivities: () => { window.dispatchEvent(new Event("ams-refresh-activities")); },
 }));
 

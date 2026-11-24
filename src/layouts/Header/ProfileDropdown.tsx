@@ -1,16 +1,17 @@
 import React, { useRef, useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { ChevronRight, Download, LogOut, Users, ShieldCheck, UserCheck, Building2, Briefcase, Search, X, Sliders } from "lucide-react";
+import { ChevronRight, Download, LogOut, Users, ShieldCheck, UserCheck, Building2, Briefcase, Sliders } from "lucide-react";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import { useAppStore } from "@/store/useAppStore";
 import { usePWAInstall } from "@/hooks/usePWAInstall";
-import { currentUser as defaultUser } from "@/data/mockData";
+import { emptyUser as defaultUser } from "@/store/useAuthStore";
+import {getHeaderSummary} from "@/services/header";
+import { useApiQuery } from "@/hooks/useApiQuery";
 import { UserProfile } from "@/types";
 import { ROUTES } from "@/app/routes";
-import { totalAdminsRoster, type AdminRosterItem } from "@/features/admins/data/mockAdminsData";
-import { totalRepresentativesList } from "@/features/representatives/data/mockRepresentativesData";
-import { totalAgentsList } from "@/features/agents/data/mockAgentsData";
+import type { AdminRosterItem } from "@/features/admins/types";
+
+
 
 export interface ProfileDropdownProps {
   isOpen: boolean;
@@ -20,7 +21,7 @@ export interface ProfileDropdownProps {
 }
 
 export type { AdminRosterItem };
-export { totalAdminsRoster };
+
 
 const profileMenuVariants: Variants = {
   hidden: {
@@ -92,6 +93,8 @@ const submenuVariants: Variants = {
 
 export const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ isOpen, onClose, user = defaultUser, onSignOut }) => {
   const navigate = useNavigate();
+  const {data: summary, loading, error, reload} = useApiQuery(signal => isOpen ? getHeaderSummary(signal) : Promise.resolve(null), [isOpen]);
+  const count = (value?: number) => loading || error ? "—" : value ?? "—";
   const openModal = useAppStore((state) => state.openModal);
   const openPWAInstall = useAppStore((state) => state.openPWAInstall);
   const { isInstalled } = usePWAInstall();
@@ -101,15 +104,8 @@ export const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ isOpen, onClos
   const [isAdminDropdownOpen, setIsAdminDropdownOpen] = useState(true);
   const [isAgentDropdownOpen, setIsAgentDropdownOpen] = useState(true);
 
-  // Total Admins Roster modal state
-  const [isTotalAdminsModalOpen, setIsTotalAdminsModalOpen] = useState(false);
-  const [adminSearchQuery, setAdminSearchQuery] = useState("");
-
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (isTotalAdminsModalOpen) {
-        return;
-      }
       if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
         const target = event.target as HTMLElement;
         if (target.closest('[aria-label="User profile menu"]')) {
@@ -121,11 +117,7 @@ export const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ isOpen, onClos
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        if (isTotalAdminsModalOpen) {
-          setIsTotalAdminsModalOpen(false);
-        } else {
-          onClose();
-        }
+        onClose();
       }
     };
 
@@ -138,7 +130,7 @@ export const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ isOpen, onClos
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen, onClose, isTotalAdminsModalOpen]);
+  }, [isOpen, onClose]);
 
   const handleNavigateToProfile = () => {
     onClose();
@@ -149,14 +141,6 @@ export const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ isOpen, onClos
     onClose();
     navigate(path);
   };
-
-  const filteredAdmins = totalAdminsRoster.filter(
-    (adm) =>
-      adm.name.toLowerCase().includes(adminSearchQuery.toLowerCase()) ||
-      adm.role.toLowerCase().includes(adminSearchQuery.toLowerCase()) ||
-      adm.department.toLowerCase().includes(adminSearchQuery.toLowerCase()) ||
-      adm.email.toLowerCase().includes(adminSearchQuery.toLowerCase()),
-  );
 
   return (
     <>
@@ -171,6 +155,7 @@ export const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ isOpen, onClos
             exit="exit"
             className="custom-scrollbar absolute right-0 top-full z-40 mt-2.5 max-h-[min(640px,calc(100vh-85px))] w-[350px] select-none overflow-y-auto rounded-[26px] border border-brand-border/80 bg-white/95 p-2.5 text-left shadow-dropdown shadow-burgundy/10 backdrop-blur-md"
           >
+            {error && <p role="alert" className="p-2 text-xs text-brand-red">Unable to load totals. <button onClick={() => void reload()} className="underline">Retry</button></p>}
             {/* Top Profile Card - Clickable to View Admin Profile */}
             <motion.div
               variants={profileItemVariants}
@@ -191,7 +176,7 @@ export const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ isOpen, onClos
                 <p className="mt-0.5 truncate text-xs font-normal leading-tight text-text-muted">{user.email}</p>
                 <div className="mt-1 flex items-center gap-1">
                   <span className="inline-flex items-center rounded-full bg-burgundy-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-burgundy-primary">
-                    {user.role || "super-admin"}
+                    {user.role || "Administrator"}
                   </span>
                 </div>
               </div>
@@ -235,7 +220,7 @@ export const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ isOpen, onClos
 
                   <div className="flex items-center gap-1.5">
                     <span className="rounded-full border border-burgundy-primary/20 bg-burgundy-primary/5 px-2 py-0.5 text-[10px] font-bold text-burgundy-primary">
-                      {totalAdminsRoster.length} Admins
+                      {count(summary?.admins)} Admins
                     </span>
                     <motion.span
                       animate={{ rotate: isAdminDropdownOpen ? 90 : 0 }}
@@ -269,7 +254,7 @@ export const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ isOpen, onClos
                         </div>
                         <div className="flex items-center gap-1.5">
                           <span className="rounded-md bg-brand-light-red px-1.5 py-0.5 text-[10px] font-bold text-brand-red">
-                            {totalAdminsRoster.length} Active
+                            {count(summary?.activeAdmins)} Active
                           </span>
                           <ChevronRight className="h-3.5 w-3.5 text-text-muted opacity-60 transition-transform group-hover:translate-x-0.5 group-hover:opacity-100" />
                         </div>
@@ -302,7 +287,7 @@ export const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ isOpen, onClos
 
                     <div className="flex items-center gap-1.5">
                       <span className="rounded-full border border-brand-red/20 bg-brand-light-red/80 px-2 py-0.5 text-[10px] font-bold text-brand-red">
-                        78 Total
+                        {count(summary?.partners)} Total
                       </span>
                       <motion.span
                         animate={{ rotate: isAgentDropdownOpen ? 90 : 0 }}
@@ -336,7 +321,7 @@ export const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ isOpen, onClos
                           </div>
                           <div className="flex items-center gap-1.5">
                             <span className="rounded-md border border-brand-border/60 bg-brand-bg px-1.5 py-0.5 text-[10px] font-bold text-text-secondary">
-                              {totalAgentsList.length} Agents
+                              {count(summary?.agents)} Agents
                             </span>
                             <ChevronRight className="h-3.5 w-3.5 text-text-muted opacity-60 transition-transform group-hover:translate-x-0.5 group-hover:opacity-100" />
                           </div>
@@ -354,7 +339,7 @@ export const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ isOpen, onClos
                           </div>
                           <div className="flex items-center gap-1.5">
                             <span className="rounded-md border border-brand-border/60 bg-brand-bg px-1.5 py-0.5 text-[10px] font-bold text-text-secondary">
-                              {totalRepresentativesList.length} Reps
+                              {count(summary?.representatives)} Reps
                             </span>
                             <ChevronRight className="h-3.5 w-3.5 text-text-muted opacity-60 transition-transform group-hover:translate-x-0.5 group-hover:opacity-100" />
                           </div>
@@ -465,159 +450,6 @@ export const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ isOpen, onClos
         )}
       </AnimatePresence>
 
-      {/* ============================================================== */}
-      {/* 4. TOTAL ADMINS ROSTER MODAL                                   */}
-      {/* ============================================================== */}
-      {typeof document !== "undefined" &&
-        createPortal(
-          <AnimatePresence>
-            {isTotalAdminsModalOpen && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                {/* Backdrop */}
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  onClick={() => setIsTotalAdminsModalOpen(false)}
-                  className="fixed inset-0 bg-[#1D1015]/50 backdrop-blur-sm"
-                />
-
-                {/* Modal Container */}
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.94, y: 12 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.94, y: 12 }}
-                  transition={{ type: "spring", stiffness: 380, damping: 28 }}
-                  onClick={(e) => e.stopPropagation()}
-                  className="relative z-10 w-full max-w-lg overflow-hidden rounded-[26px] border border-brand-border bg-white shadow-2xl"
-                >
-                  {/* Modal Header */}
-                  <div className="border-b border-brand-border/70 bg-gradient-to-r from-brand-bg via-white to-brand-bg px-6 py-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="shadow-xs flex h-10 w-10 items-center justify-center rounded-xl bg-burgundy-primary/10 text-burgundy-primary">
-                          <Users className="h-5 w-5 stroke-[2.2]" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-base font-bold text-text-primary">Total Administrators</h3>
-                            <span className="rounded-full bg-burgundy-primary/10 px-2.5 py-0.5 text-xs font-bold text-burgundy-primary">
-                              {totalAdminsRoster.length} Active
-                            </span>
-                          </div>
-                          <p className="text-xs text-text-muted">Avis World College administrative personnel roster</p>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => setIsTotalAdminsModalOpen(false)}
-                        className="rounded-full p-1.5 text-text-muted transition-colors hover:bg-brand-light-red/60 hover:text-text-primary"
-                        aria-label="Close modal"
-                      >
-                        <X className="h-5 w-5" />
-                      </button>
-                    </div>
-
-                    {/* Search Bar */}
-                    <div className="relative mt-3.5">
-                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
-                      <input
-                        type="text"
-                        placeholder="Search administrators by name, role, email..."
-                        value={adminSearchQuery}
-                        onChange={(e) => setAdminSearchQuery(e.target.value)}
-                        className="w-full rounded-xl border border-brand-border/80 bg-white py-2 pl-9 pr-4 text-xs text-text-primary outline-none transition-all placeholder:text-text-muted focus:border-brand-accent focus:ring-2 focus:ring-brand-accent/20"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Modal Body: Admins List */}
-                  <div className="custom-scrollbar max-h-[380px] space-y-2.5 overflow-y-auto p-4">
-                    {filteredAdmins.length === 0 ? (
-                      <div className="py-8 text-center">
-                        <Users className="mx-auto h-8 w-8 text-text-muted/60" />
-                        <p className="mt-2 text-xs font-semibold text-text-primary">No administrators found</p>
-                        <p className="text-[11px] text-text-muted">Try adjusting your search criteria</p>
-                      </div>
-                    ) : (
-                      filteredAdmins.map((adm) => (
-                        <div
-                          key={adm.id}
-                          className="hover:shadow-xs group flex items-center justify-between rounded-2xl border border-brand-border/80 bg-brand-bg/40 p-3 transition-all hover:border-brand-accent/40 hover:bg-white"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="relative">
-                              <img
-                                src={adm.avatarUrl}
-                                alt={adm.name}
-                                className="h-10 w-10 rounded-full border border-brand-border object-cover"
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).src = "/avis-emblem.png";
-                                }}
-                              />
-                              <span className="absolute bottom-0 right-0 flex h-2.5 w-2.5">
-                                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-                                <span className="relative inline-flex h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500" />
-                              </span>
-                            </div>
-
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <h4 className="text-xs font-bold text-text-primary group-hover:text-brand-red">{adm.name}</h4>
-                                <span className="rounded-full bg-burgundy-primary/10 px-2 py-0.5 text-[9.5px] font-bold text-burgundy-primary">
-                                  {adm.role}
-                                </span>
-                              </div>
-                              <p className="text-[11px] text-text-muted">{adm.email}</p>
-                              <p className="mt-0.5 text-[10.5px] font-medium text-text-secondary">{adm.department}</p>
-                            </div>
-                          </div>
-
-                          <div className="text-right">
-                            <span className="inline-block rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                              {adm.lastActive}
-                            </span>
-                            <p className="mt-1 text-[10px] text-text-muted">{adm.accessLevel}</p>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  {/* Modal Footer */}
-                  <div className="flex items-center justify-between border-t border-brand-border/70 bg-brand-bg/60 px-6 py-3.5">
-                    <span className="text-xs text-text-muted">
-                      Showing {filteredAdmins.length} of {totalAdminsRoster.length} admins
-                    </span>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setIsTotalAdminsModalOpen(false)}
-                        className="rounded-xl border border-brand-border px-3.5 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:bg-white"
-                      >
-                        Close
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsTotalAdminsModalOpen(false);
-                          handleNavigate(ROUTES.ADMINS);
-                        }}
-                        className="shadow-xs flex items-center gap-1.5 rounded-xl bg-burgundy-primary px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-brand-red"
-                      >
-                        <Users className="h-3.5 w-3.5" />
-                        <span>View Total Admins Table</span>
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
-              </div>
-            )}
-          </AnimatePresence>,
-          document.body,
-        )}
     </>
   );
 };

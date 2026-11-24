@@ -11,17 +11,11 @@ export interface StudentDetailsCardProps {
 export const StudentDetailsCard: React.FC<StudentDetailsCardProps> = ({ record, className = "" }) => {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  // Resolve fields with priority to user requested details with fallback to record
-  const studentName = record?.student?.name && record.student.name !== "Emma Watson" ? record.student.name : "Vishnu Krishnakumar";
-
-  const finNumber = record?.student?.finNumber || "M0292335U22";
-  const nationality = record?.student?.nationality || "Indian";
-  const course =
-    record?.student?.course && record.student.course !== "Diploma in International Business Management"
-      ? record.student.course
-      : "Diploma In Business (information Technology)";
-
-  const tenureDate = record?.student?.tenureDate || "12 Dec 2025";
+  const studentName = record?.student.name || "—";
+  const finNumber = record?.student.finNumber || "—";
+  const nationality = record?.student.nationality || "—";
+  const course = record?.student.course || "—";
+  const tenureDate = record?.student.tenureDate || "—";
 
   // Monogram initials
   const initials = studentName

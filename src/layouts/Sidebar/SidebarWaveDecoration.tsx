@@ -1,3 +1,4 @@
+import {createWaveSamples, updateWaveSamples} from "./waveGeometry";
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -87,7 +88,10 @@ export const SidebarWaveDecorationComponent: React.FC<SidebarWaveDecorationProps
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let prefersReducedMotion = motionPreference.matches;
+    let samples: ReturnType<typeof createWaveSamples> = [];
+    let sampleWidth = 0, sampleHeight = 0;
     let startTime: number | null = null;
     let isRunning = false;
 
@@ -106,9 +110,9 @@ export const SidebarWaveDecorationComponent: React.FC<SidebarWaveDecorationProps
       animFrameRef.current = requestAnimationFrame(render);
     };
 
-    const render = (timestamp: number) => {
-      if (!isRunning) return;
-      if (!startTime) startTime = timestamp;
+    const render = (timestamp: number, staticFrame = false) => {
+      if (!isRunning && !staticFrame) return;
+      if (startTime === null) startTime = timestamp;
       const elapsed = (timestamp - startTime) * 0.001; // elapsed seconds
       const t = prefersReducedMotion ? 0 : elapsed;
 
@@ -135,64 +139,22 @@ export const SidebarWaveDecorationComponent: React.FC<SidebarWaveDecorationProps
       ctx.scale(dpr, dpr);
       ctx.clearRect(0, 0, W, H);
 
-      // --- 1. Wave Mathematical Profiles ---
-      // Primary crest ribbon: dips at u ~ 0.20, rises into prominent crest at u ~ 0.72
-      const getPrimaryCrestY = (u: number, time: number) => {
-        const base =
-          H *
-          (0.58 -
-            0.26 * Math.exp(-Math.pow((u - 0.72) / 0.20, 2)) +
-            0.06 * Math.exp(-Math.pow((u - 0.20) / 0.16, 2)) -
-            0.08 * (u - 0.5));
-
-        const breathing =
-          3.2 * Math.sin(2 * Math.PI * 0.75 * u - 1.15 * time) +
-          1.8 * Math.cos(2 * Math.PI * 1.35 * u + 0.85 * time) +
-          1.0 * Math.sin(2 * Math.PI * 0.4 * u - 0.45 * time);
-
-        let mouseDeflect = 0;
-        if (mouse.active) {
-          const distU = Math.abs(u - mouse.x / Math.max(W, 1));
-          mouseDeflect = Math.exp(-Math.pow(distU / 0.22, 2)) * -6 * mouse.boost;
-        }
-
-        return base + breathing + mouseDeflect;
-      };
-
-      // Secondary crossing ribbon: starts higher on left (u ~ 0), crosses under primary at u ~ 0.44, valleys at u ~ 0.70
-      const getCrossingWaveY = (u: number, time: number) => {
-        const base =
-          H *
-          (0.42 +
-            0.22 * Math.exp(-Math.pow((u - 0.70) / 0.24, 2)) -
-            0.05 * Math.exp(-Math.pow((u - 0.22) / 0.18, 2)) +
-            0.12 * (u - 0.3));
-
-        const breathing =
-          2.6 * Math.sin(2 * Math.PI * 0.85 * u + 1.05 * time) +
-          1.5 * Math.cos(2 * Math.PI * 1.45 * u - 0.75 * time);
-
-        let mouseDeflect = 0;
-        if (mouse.active) {
-          const distU = Math.abs(u - mouse.x / Math.max(W, 1));
-          mouseDeflect = Math.exp(-Math.pow(distU / 0.25, 2)) * 4 * mouse.boost;
-        }
-
-        return base + breathing + mouseDeflect;
-      };
+      if (W !== sampleWidth || H !== sampleHeight) {
+        samples = createWaveSamples(W, H); sampleWidth = W; sampleHeight = H;
+      }
+      updateWaveSamples(samples, W, t, mouse);
 
       // --- 2. Render Secondary Crossing Wave Strands (Dynamically scaled spread) ---
-      const crossSpread = Math.max(12, Math.min(22, W * 0.08));
       const crossStrandCount = 10;
 
       for (let i = 0; i < crossStrandCount; i++) {
         const s = i / Math.max(crossStrandCount - 1, 1);
         const strandAlpha = (0.46 - s * 0.28) * (1 + mouse.boost * 0.2);
         ctx.beginPath();
-        for (let x = 0; x <= W; x += 5) {
-          const u = x / W;
-          const yBase = getCrossingWaveY(u, t);
-          const spread = (s - 0.5) * (crossSpread + 4 * Math.sin(u * 3.0 + t));
+        for (const point of samples) {
+          const {x, u} = point;
+          const yBase = point.crossingY;
+          const spread = (s - 0.5) * point.crossingSpread;
           const ripple = 1.0 * Math.sin(u * 7.0 + i * 0.3 + t);
           const y = yBase + spread + ripple;
           if (x === 0) ctx.moveTo(x, y);
@@ -207,21 +169,16 @@ export const SidebarWaveDecorationComponent: React.FC<SidebarWaveDecorationProps
       }
 
       // --- 3. Render Primary Wave Silk Strands (Dense Clean Ribbon Mesh) ---
-      const primarySpread = Math.max(14, Math.min(24, W * 0.09));
       const primaryStrandCount = 18;
 
       for (let i = primaryStrandCount - 1; i >= 0; i--) {
         const s = i / Math.max(primaryStrandCount - 1, 1);
         ctx.beginPath();
 
-        for (let x = 0; x <= W; x += 5) {
-          const u = x / W;
-          const crestY = getPrimaryCrestY(u, t);
-
-          // Variable strand spread: tighter at crest, fanned out at the flanks
-          const spread =
-            primarySpread *
-            (1.0 - 0.48 * Math.exp(-Math.pow((u - 0.72) / 0.22, 2)));
+        for (const point of samples) {
+          const {x, u} = point;
+          const crestY = point.primaryY;
+          const spread = point.spread;
 
           // Individual strand ripple offset
           const ripple = 1.5 * Math.sin(u * 8.5 + i * 0.26 - t * 1.25);
@@ -305,7 +262,15 @@ export const SidebarWaveDecorationComponent: React.FC<SidebarWaveDecorationProps
       io.observe(containerRef.current);
     }
 
-    startLoop();
+    const drawStatic = () => { updateCanvasDimensions(); render(0, true); };
+    const onMotionChange = () => {
+      prefersReducedMotion = motionPreference.matches;
+      if (prefersReducedMotion) { stopLoop(); drawStatic(); } else startLoop();
+    };
+    const resize = new ResizeObserver(() => { if (prefersReducedMotion) drawStatic(); });
+    if (containerRef.current) resize.observe(containerRef.current);
+    motionPreference.addEventListener('change', onMotionChange);
+    if (prefersReducedMotion) drawStatic(); else startLoop();
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -320,9 +285,11 @@ export const SidebarWaveDecorationComponent: React.FC<SidebarWaveDecorationProps
     return () => {
       stopLoop();
       io?.disconnect();
+      resize.disconnect();
+      motionPreference.removeEventListener('change', onMotionChange);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [collapsed]);
+  }, [collapsed, updateCanvasDimensions]);
 
   // Interactive mouse reactions
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {

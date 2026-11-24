@@ -9,7 +9,7 @@ import { sanitizeInput } from "@/lib/security";
 export interface CourseModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (course: CollegeCourse) => void;
+  onSave: (course: CollegeCourse) => void | boolean | Promise<void | boolean>;
   course?: CollegeCourse | null;
   availableCategories?: string[];
 }
@@ -99,7 +99,7 @@ export const CourseModal: React.FC<CourseModalProps> = ({ isOpen, onClose, onSav
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
 
@@ -127,19 +127,19 @@ export const CourseModal: React.FC<CourseModalProps> = ({ isOpen, onClose, onSav
         title: sanitizedTitle,
         level: derivedLevel,
         courseType: courseType,
-        category: course?.category || "School of Higher Studies",
-        department: course?.department || "Academic Department",
+        category: course?.category || "",
+        department: course?.department || "",
         duration: sanitizedDuration,
         applicationFee: sanitizedAppFee,
         fee: course?.fee || sanitizedAppFee,
         requirementDescription: sanitizedReqs,
-        seats: course?.seats ?? 60,
+        seats: course?.seats ?? 0,
         enrolled: course?.enrolled ?? 0,
         status: course?.status || "Active",
-        intakes: course?.intakes?.length ? course.intakes : ["Spring 2026"],
+        intakes: course?.intakes || [],
       };
 
-      onSave(updatedCourse);
+      if (await onSave(updatedCourse) === false) return;
       onClose();
     } finally {
       setIsSubmitting(false);

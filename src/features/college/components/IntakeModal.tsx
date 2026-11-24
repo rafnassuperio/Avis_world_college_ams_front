@@ -9,7 +9,7 @@ import { sanitizeInput } from "@/lib/security";
 export interface IntakeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (intake: CollegeIntake) => void;
+  onSave: (intake: CollegeIntake) => void | boolean | Promise<void | boolean>;
   intake?: CollegeIntake | null;
 }
 
@@ -114,7 +114,7 @@ export const IntakeModal: React.FC<IntakeModalProps> = ({ isOpen, onClose, onSav
         setCompletionDate(toDateInputValue(intake.completionDate));
         setFinalExamResultDate(toDateInputValue(intake.finalExamResultDate));
         setConfermentDate(toDateInputValue(intake.confermentDate));
-        setYear(intake.year || (intake.academicYear ? intake.academicYear.replace(/\D/g, "").slice(0, 4) : "2026"));
+        setYear(String(intake.year || (intake.academicYear ? String(intake.academicYear).replace(/\D/g, "").slice(0, 4) : "")));
         setStatus(normalizeIntakeStatus(intake.status));
       } else {
         setIntakeMonth("January");
@@ -164,7 +164,7 @@ export const IntakeModal: React.FC<IntakeModalProps> = ({ isOpen, onClose, onSav
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
 
@@ -194,10 +194,10 @@ export const IntakeModal: React.FC<IntakeModalProps> = ({ isOpen, onClose, onSav
         commenceDate: intakeDate,
         targetEnrollment: intake?.targetEnrollment || 250,
         currentEnrollment: intake?.currentEnrollment || 0,
-        activeCoursesCount: intake?.activeCoursesCount || 10,
+        activeCoursesCount: intake?.activeCoursesCount ?? 0,
       };
 
-      onSave(intakeData);
+      if (await onSave(intakeData) === false) return;
       onClose();
     } finally {
       setIsSubmitting(false);

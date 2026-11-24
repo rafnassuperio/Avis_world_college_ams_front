@@ -52,7 +52,7 @@ export const ProfileHeroCard: React.FC<ProfileHeroCardProps> = ({ user, onEditCl
             <div className="rounded-full bg-gradient-to-tr from-burgundy-primary via-brand-red to-burgundy-dark p-[3.5px] shadow-lg shadow-burgundy-primary/20">
               <div className="rounded-full bg-white p-[3px]">
                 <img
-                  src={user.avatarUrl || "/avis-emblem.png"}
+                  src={user.avatarUrl || "—"}
                   alt={user.name}
                   className="group-hover:scale-102 h-24 w-24 rounded-full object-cover transition-transform duration-300 sm:h-28 sm:w-28 md:h-28 md:w-28"
                   onError={(e) => {
@@ -83,13 +83,13 @@ export const ProfileHeroCard: React.FC<ProfileHeroCardProps> = ({ user, onEditCl
         {/* 3. Name, Role, Email & Location Badges */}
         <div className="space-y-2.5 text-center sm:text-left">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-            <h1 className="text-xl font-extrabold tracking-tight text-text-primary sm:text-xl md:text-[22px]">{user.name || "Avis World College"}</h1>
+            <h1 className="text-xl font-extrabold tracking-tight text-text-primary sm:text-xl md:text-[22px]">{user.name || "—"}</h1>
 
             {/* Role Badge */}
             <div className="flex items-center justify-center gap-1.5 sm:justify-start">
               <span className="shadow-xs inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-burgundy-primary to-brand-red px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white">
                 <ShieldCheck className="h-3.5 w-3.5" />
-                <span>{user.role || "super-admin"}</span>
+                <span>{user.role || "—"}</span>
               </span>
 
               <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
@@ -104,7 +104,7 @@ export const ProfileHeroCard: React.FC<ProfileHeroCardProps> = ({ user, onEditCl
             {/* Email with copy button */}
             <div className="flex items-center gap-1.5 rounded-lg border border-brand-border/70 bg-brand-bg/90 px-2.5 py-1">
               <Mail className="h-3.5 w-3.5 text-brand-red" />
-              <span className="font-semibold text-text-primary">{user.email || "acetek1@example.com"}</span>
+              <span className="font-semibold text-text-primary">{user.email || "—"}</span>
               <button
                 type="button"
                 onClick={handleCopyEmail}
@@ -119,21 +119,21 @@ export const ProfileHeroCard: React.FC<ProfileHeroCardProps> = ({ user, onEditCl
             <div className="flex items-center gap-1.5 rounded-lg border border-brand-border/70 bg-brand-bg/90 px-2.5 py-1">
               <MapPin className="h-3.5 w-3.5 text-brand-red" />
               <span className="text-text-muted">City:</span>
-              <span className="font-semibold text-text-primary">{user.city || "Kerala"}</span>
+              <span className="font-semibold text-text-primary">{user.city || "—"}</span>
             </div>
 
             {/* State */}
             <div className="flex items-center gap-1.5 rounded-lg border border-brand-border/70 bg-brand-bg/90 px-2.5 py-1">
               <MapPin className="h-3.5 w-3.5 text-brand-red" />
               <span className="text-text-muted">State:</span>
-              <span className="font-semibold text-text-primary">{user.state || "acetek@example.com"}</span>
+              <span className="font-semibold text-text-primary">{user.state || "—"}</span>
             </div>
 
             {/* Country */}
             <div className="flex items-center gap-1.5 rounded-lg border border-brand-border/70 bg-brand-bg/90 px-2.5 py-1">
               <Globe className="h-3.5 w-3.5 text-brand-red" />
               <span className="text-text-muted">Country:</span>
-              <span className="font-semibold text-text-primary">{user.country || "India"}</span>
+              <span className="font-semibold text-text-primary">{user.country || "—"}</span>
             </div>
           </div>
         </div>

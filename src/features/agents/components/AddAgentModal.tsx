@@ -5,12 +5,13 @@ import { UserPlus, Mail, Phone, Upload, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Dropdown, DropdownOption } from "@/components/ui/Dropdown";
 import countriesData from "@/data/country.json";
-import { getRepresentativesList } from "@/features/representatives/data/mockRepresentativesData";
+import { representatives } from "@/services/ams";
+import { useApiCollection } from "@/hooks/useApiCollection";
 
 export interface AddAgentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (newAgent: AgentItem) => void;
+  onAdd: (newAgent: AgentItem) => void | boolean | Promise<void | boolean>;
   nextAgentCode?: string;
 }
 
@@ -20,6 +21,7 @@ export const AddAgentModal: React.FC<AddAgentModalProps> = ({
   onAdd,
   nextAgentCode = "AWC-AG-013",
 }) => {
+  const { data: reps } = useApiCollection(representatives);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -34,9 +36,9 @@ export const AddAgentModal: React.FC<AddAgentModalProps> = ({
 
   // Representative options from active representatives roster
   const representativeOptions: DropdownOption[] = useMemo(() => {
-    const reps = getRepresentativesList();
+
     if (reps.length === 0) {
-      return [{ label: "General Administration", value: "General Administration" }];
+      return [];
     }
     return reps.map((r) => ({
       label: `${r.name} (${r.country})`,
@@ -99,14 +101,14 @@ export const AddAgentModal: React.FC<AddAgentModalProps> = ({
     setEmail("");
     setPhone("");
     setType("Direct Recruiter");
-    setRepresentative(representativeOptions[0]?.value || "Dr. Sarah Jenkins");
+    setRepresentative(representativeOptions[0]?.value || "");
     setCountry("India");
     setStatus("Active");
     setAvatarUrl("/avis-emblem.png");
     setError("");
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       setError("Please enter the Agent's Full Name.");
@@ -150,7 +152,7 @@ export const AddAgentModal: React.FC<AddAgentModalProps> = ({
       agencyName: `${name.trim()} Agency`,
     };
 
-    onAdd(newAgent);
+    if (await onAdd(newAgent) === false) return;
     handleReset();
     onClose();
   };

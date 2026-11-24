@@ -10,7 +10,7 @@ export interface EditAdminModalProps {
   isOpen: boolean;
   onClose: () => void;
   admin: AdminRosterItem | null;
-  onSaveAdmin: (updated: AdminRosterItem) => void;
+  onSaveAdmin: (updated: AdminRosterItem) => void | boolean | Promise<void | boolean>;
 }
 
 export const EditAdminModal: React.FC<EditAdminModalProps> = ({ isOpen, onClose, admin, onSaveAdmin }) => {
@@ -76,7 +76,7 @@ export const EditAdminModal: React.FC<EditAdminModalProps> = ({ isOpen, onClose,
     reader.readAsDataURL(file);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       setError("Please provide the administrator's Full Name.");
@@ -111,7 +111,7 @@ export const EditAdminModal: React.FC<EditAdminModalProps> = ({ isOpen, onClose,
       location: resolvedLocation,
     };
 
-    onSaveAdmin(updated);
+    if (await onSaveAdmin(updated) === false) return;
     onClose();
   };
 

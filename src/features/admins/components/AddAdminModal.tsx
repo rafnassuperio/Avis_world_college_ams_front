@@ -9,7 +9,7 @@ import countriesData from "@/data/country.json";
 export interface AddAdminModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddAdmin: (newAdmin: AdminRosterItem) => void;
+  onAddAdmin: (newAdmin: AdminRosterItem) => void | boolean | Promise<void | boolean>;
   nextEmployeeId?: string;
 }
 
@@ -72,7 +72,7 @@ export const AddAdminModal: React.FC<AddAdminModalProps> = ({ isOpen, onClose, o
     setError("");
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       setError("Please provide the administrator's Full Name.");
@@ -127,7 +127,7 @@ export const AddAdminModal: React.FC<AddAdminModalProps> = ({ isOpen, onClose, o
       assignedModules: ["DASHBOARD", "COLLEGE REPORT", "STUDENT MANAGEMENT"],
     };
 
-    onAddAdmin(newAdmin);
+    if (await onAddAdmin(newAdmin) === false) return;
     handleReset();
     onClose();
   };

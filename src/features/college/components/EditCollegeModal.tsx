@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { CollegeDetails } from "../types";
-import { assets } from "@/assets/assets";
 import { Building2, MapPin, Phone, Mail, Upload, RotateCcw, Image as ImageIcon } from "lucide-react";
 import { smoothEase } from "@/components/animations/transitions";
 import { validateFileUpload } from "@/lib/security";
@@ -12,7 +11,7 @@ export interface EditCollegeModalProps {
   isOpen: boolean;
   onClose: () => void;
   college: CollegeDetails;
-  onSave: (updated: CollegeDetails) => void;
+  onSave: (updated: CollegeDetails) => void | boolean | Promise<void | boolean>;
 }
 
 const formContainerVariants = {
@@ -65,18 +64,15 @@ export const EditCollegeModal: React.FC<EditCollegeModalProps> = ({ isOpen, onCl
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
       newErrors.email = "Please enter a valid email address";
     }
-    if (!formData.image.trim()) {
-      newErrors.image = "College image is required";
-    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
-    onSave(formData);
+    if (await onSave(formData) === false) return;
     onClose();
   };
 
@@ -112,7 +108,7 @@ export const EditCollegeModal: React.FC<EditCollegeModalProps> = ({ isOpen, onCl
   };
 
   const handleResetImage = () => {
-    setFormData((prev) => ({ ...prev, image: assets.avisCollege }));
+    setFormData((prev) => ({ ...prev, image: college.image }));
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }

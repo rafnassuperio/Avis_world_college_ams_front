@@ -2,7 +2,10 @@ import React, { useState, useMemo } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { PieChart as PieIcon, CreditCard } from "lucide-react";
 import { Dropdown } from "@/components/ui/Dropdown";
-import { paymentStatusDataByFilter } from "../data/reportsData";
+import { useAnalytics } from "@/services/analytics";
+import { useApiCollection } from "@/hooks/useApiCollection";
+import { intakes } from "@/services/ams";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { PaymentStatusDataPoint } from "../types";
 import { cn } from "@/lib/utils";
 
@@ -55,19 +58,19 @@ export const PaymentStatusPieChart: React.FC = () => {
   const [selectedFilter, setSelectedFilter] = useState<string>("All Intakes");
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-  const filterOptions = [
-    { label: "All Intakes", value: "All Intakes" },
-    { label: "Spring 2026", value: "Spring 2026" },
-    { label: "AY 2025-2026", value: "AY 2025-2026" },
-  ];
+  const { data: intakeList } = useApiCollection(intakes);
+  const filterOptions = [{ label: "All Intakes", value: "All Intakes" }, ...intakeList.map(i => ({ label: i.name, value: i.name }))];
 
-  const currentData = useMemo(() => {
-    return paymentStatusDataByFilter[selectedFilter] || paymentStatusDataByFilter["All Intakes"];
-  }, [selectedFilter]);
+  const { data, loading, error, reload } = useAnalytics(selectedFilter === "All Intakes" ? undefined : selectedFilter);
+  const count = data?.paymentStatus.reduce((sum, s) => sum + s.students, 0) || 0;
+  const currentData = (data?.paymentStatus || []).map((r, index) => ({ id: r.name, name: r.name, students: r.students, percentage: count ? Number((r.students / count * 100).toFixed(1)) : 0,
+    amount: data?.currency + " " + r.amount.toLocaleString(), color: ["#702B40", "#A64C61", "#D28B96"][index], badgeBg: "bg-brand-light-red text-burgundy-primary border-brand-border", badgeText: r.name }));
 
   const totalStudents = useMemo(() => {
     return currentData.reduce((acc, curr) => acc + curr.students, 0);
   }, [currentData]);
+
+  if (loading || error) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
 
   return (
     <div className="flex h-full flex-col justify-between rounded-[22px] border border-brand-border bg-white p-4 shadow-[0_2px_10px_-2px_rgba(87,0,31,0.03)] transition-all duration-300 hover:shadow-[0_8px_24px_-4px_rgba(87,0,31,0.06)] sm:p-5">

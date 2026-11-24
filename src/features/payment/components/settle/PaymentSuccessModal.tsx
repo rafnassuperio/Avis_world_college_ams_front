@@ -1,3 +1,4 @@
+import { downloadPaymentReceipt } from "@/services/payments";
 import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { CheckCircle2, Receipt, Download, Printer, Copy, Check, ShieldCheck, CreditCard, Calendar, X } from "lucide-react";
@@ -47,9 +48,7 @@ export const PaymentSuccessModal: React.FC<PaymentSuccessModalProps> = ({
     if (onDownloadReceipt) {
       onDownloadReceipt(transaction.receiptNo);
     } else {
-      toast.success("Receipt Downloaded", {
-        description: `Official receipt ${transaction.receiptNo} for ${studentName} generated successfully.`,
-      });
+      void downloadPaymentReceipt(transaction.id);
     }
   };
 

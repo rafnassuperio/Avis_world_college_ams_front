@@ -1,10 +1,16 @@
 import React from "react";
-import { reportOverviewStats } from "../data/reportsData";
+import { useAnalytics } from "@/services/analytics";
+import { AsyncStateView } from "@/components/common/AsyncStateView";
 import { ReportStatsCards } from "./ReportStatsCards";
 import { LocalInternationalBarChart } from "./LocalInternationalBarChart";
 import { PaymentStatusPieChart } from "./PaymentStatusPieChart";
 
 export const CollegeReportsTab: React.FC = () => {
+  const { data, loading, error, reload } = useAnalytics();
+  if (loading || error || !data) return <AsyncStateView isLoading={loading} error={error} onRetry={() => void reload()}>{null}</AsyncStateView>;
+  const reportOverviewStats = { studentEnrollment: { total: data.totals.students, growth: "—", local: data.totals.local, international: data.totals.international, period: "" },
+    coursesOffered: { total: data.totals.courses, newCourses: 0, categoriesCount: data.totals.categories, period: "" },
+    thisMonthIntake: { total: data.totals.newStudents, growth: "—", target: 0, capacityPercentage: 0, cohortName: "" } };
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-3 rounded-2xl border border-brand-border bg-white p-3.5 sm:flex-row sm:items-center sm:justify-between">
